@@ -149,4 +149,4 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 		self.drawBoard()
 		self.drawPosition(self.indexA,self.indexB)
 
-MoveEngine().run(1500)
+MoveEngine().run(1400)
