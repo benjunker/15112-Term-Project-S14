@@ -5,6 +5,21 @@
 
 from Tkinter import *
 import random
+import math
+
+def specialInt(x): #rounds down for all cases, not just towards 0
+	assert (type(x) == int or type(x) == float)
+	if x >= 0:
+		return int(x)
+	else:
+		return int(x-1)
+
+def testSpecialInt(): #tests specialInt
+	a = [1.1,1.9,0.2,0.9,-.2,-.9,-1.1,-1.9]
+	c = []
+	for b in a:
+		c.append(specialInt(b))
+	assert(c == [1,1,0,0,-1,-1,-2,-2])
 
 class Animation(object): #From Kosbie email;expanded sligtly from stock code
 	def mousePressed(self, event): pass
@@ -46,10 +61,12 @@ class Animation(object): #From Kosbie email;expanded sligtly from stock code
 
 class Tile(object): #tiles that make up the board
 	tileList = [] #list of all tiles to iterate through
-	def __init__(self,cx,cy,r,adj60,left,top,adj30,indexA,indexB,
-		typee="Normal", terrain="Normal"): #initializes each tile
-		self.cx,self.cy,self.r,self.type,self.terrain = cx,cy,r,typee,terrain
-		self.indexA,self.indexB=indexA,indexB #assigns indicies to tiles
+	def __init__(self,colPos,rowPos,r,adj60,left,top,adj30): #initializes each tile
+		cx = left + adj60 + colPos * adj60
+		cy = top + r if rowPos%2 == 0 else top+2*r+adj30
+		cy += rowPos/2*2*(r+adj30)
+		self.cx,self.cy,self.r = cx,cy,r
+		self.indexA,self.indexB = colPos,rowPos
 		Tile.tileList.append(self)
 
 class MoveEngine(Animation): #basis of the "board" and how things will move
@@ -72,14 +89,25 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 
 	def mousePressed(self,event):
 		adj60,adj30,r = self.adj60,self.adj30,self.r
-		mBlue = ((1.0*r-adj30)/int(adj60)) #slope for blue lines
-		mRed = ((1.0*adj30-r)/int(adj60)) #slope for red lines
-		print mBlue
+		mBlue = ((1.0*r-adj30)/adj60) #slope for blue lines
+		mRed = ((1.0*adj30-r)/adj60) #slope for red lines
 		#see concept "Board With Lines.png" if unclear
 		mseX,mseY = event.x,event.y
-		yIntBlue = 1
+		yIntBlue = mseY - self.top - (mseX-self.left)*mBlue
+		yIntRed = mseY - self.top - (mseX-self.left)*mRed
+		blueNum = (yIntBlue - adj30)/(2*adj30)
+		redNum = (yIntRed - adj30)/(2*adj30)
+		bFloor = int(math.floor(blueNum)) #changed from specialInt
+		rFloor = int(math.floor(redNum))  #^this
+		#print "b: " + str(blueNum) + "," + "r: " + str(redNum)
+		if (bFloor+rFloor)%3 == 0:
+			if blueNum % 1 > redNum % 1: pass
+		#		print "left"
+			else: pass
+		#		print "right"
+		print bFloor,rFloor
 
-	def keyPressed(self,event): #mainly for testing; moving uses the mouse
+	def keyPressed(self,event): #mainly for testing; as moving uses the mouse in game
 		if event.keysym == "Left": self.indexA -= 2 #move the "dot"
 		elif event.keysym == "Up": self.indexB -= 1
 		elif event.keysym == "Down": self.indexB += 1
@@ -112,26 +140,16 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 		self.left,self.top,self.right,self.bottom = left,top,right,bottom
 		self.width,self.height = width,height = abs(left-right),abs(top-bottom)
 		if r < 0: r = min(width,height)/20 #radius heuristic
-		adj60, adj30 = int(r*(3**.5)/2), int(r/2.0) #distances corresponding to the sides
+		adj60, adj30 = r*(3**.5)/2, r/2.0 #distances corresponding to the sides
 			 #opposide the 30 and 60 degree angles of triangles in the hexagons
-		print r,adj60,adj30
 		self.adj60,self.adj30,self.top,self.left,self.r=adj60,adj30,top,left,r
-		indexA = -2
-		for colPos1 in xrange(left+int(adj60),right-int(adj60),int(adj60)*2):
-			indexB = -2
-			indexA += 2
-			for rowPos1 in xrange(top+r,bottom-r,int(2*(r+adj30))):
-				indexB += 2
-				Tile(colPos1,rowPos1,r,adj60,left,top,adj30,indexA,indexB)
-		indexA = -1
-		for colPos2 in xrange(left+int(adj60)*2,right-int(adj60),
-			int(adj60)*2): #easier to iterate every other row, separately
-			indexB = -1
-			indexA += 2
-			for rowPos2 in xrange(top+int(2*r+adj30),bottom-r,
-				int(2*(r+adj30))):
-				indexB += 2
-				Tile(colPos2,rowPos2,r,adj60,left,top,adj30,indexA,indexB)
+		print r, adj60,adj30
+		for colPos1 in xrange(0,20,2):
+			for rowPos1 in xrange(0,10,2):
+				Tile(colPos1,rowPos1,r,adj60,left,top,adj30)
+		for colPos2 in xrange(1,20,2): #easier to iterate every other row, separately
+			for rowPos2 in xrange(1,10,2):
+				Tile(colPos2,rowPos2,r,adj60,left,top,adj30)
 
 	def drawPosition(self,indexA,indexB): #draws dot: hypothetical unit
 		if (indexA%2 != indexB%2): indexA += 1 #NOT self.indexA
@@ -162,3 +180,10 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 		self.drawPosition(self.indexA,self.indexB)
 
 MoveEngine().run()
+
+def testAll():
+	print
+	testSpecialInt()
+	print "All Passed!"
+
+testAll()
