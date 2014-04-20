@@ -4,6 +4,8 @@
 import random
 
 class Unit(object): #generic unit class
+	unitDict = {}
+
 	effectiveDict = {"very ineffective" : 1,
 					 "ineffective"      : 2,
 					 "neutral"          : 3,
@@ -60,18 +62,20 @@ class Unit(object): #generic unit class
 							5 : "very effective"}
 							#dictionary that qualifies an efectiveness number
 
-	def __init__(self,atk,df,team,moves,xPos,yPos,sight,health,
+	def __init__(self,team,moves,xPos,yPos,sight,
 		state="neutral"): #initializes units
-		self.atk = atk #attacking power
-		self.df = df #defending ability
+		try: Unit.unitDict[(xPos,yPos)].add(self)
+		except: Unit.unitDict[(xPos,yPos)] = set([self])
+		#self.atk = atk #attacking power
+		#self.df = df #defending ability
 		#self.type = typee #purpose of unit (ie-attack,build,settle,etc)
 		self.team = team #which player/team controls the unit
 		#self.mode = mode #mode of attack (if at all) (ie - ground,range,etc)
 		self.moves = moves #number of moves per turn
 		self.xPos = xPos #current x position --> an index?
 		self.yPos = yPos # current y position --> and index?
-		self.sight = sight #amount of tiles away, that a unit can "s    ee"
-		self.health = health #health remaining
+		self.sight = sight #amount of tiles away, that a unit can "see"
+		#self.health = health #health remaining
 		self.state = state #game state (ie-neutral,fortitified,etc)
 		self.defaultMoves = moves #num of moves per turn --> to reset
 
@@ -88,7 +92,10 @@ class Military(Unit):
 	#for military (attacking) units
 	#three types (maybe only two) Land, Range, and (maybe) Air
 	def __init__(self,atk,df,team,moves,xPos,yPos,sight,health,rank="normal"):
-		super(Military,self).__init__(atk,df,team,moves,xPos,yPos,sight,health)
+		super(Military,self).__init__(team,moves,xPos,yPos,sight)
+		self.atk = atk
+		self.df = df
+		self.health = health
 		self.rank = rank #current ability/prowess (normal, elite, or master)
 		self.exp = 0 #current amount of experience
 
@@ -99,10 +106,13 @@ class Military(Unit):
 		return successNumber
 
 	def battle(self,other): #battle enginge, for military units
-		selfSuccess = self.battleSuccess()
-		otherSuccess = other.battleSuccess()
-		self.attack(other,selfSuccess,otherSuccess)
-		other.retaliate(self,selfSuccess,otherSuccess)
+		if isinstance(other,Military):		
+			selfSuccess = self.battleSuccess()
+			otherSuccess = other.battleSuccess()
+			self.attack(other,selfSuccess,otherSuccess)
+			other.retaliate(self,selfSuccess,otherSuccess)
+		elif isinstance(other,Support):
+			other.lose(self)
 
 	def attack(self,other,selfSuccess,otherSuccess): #dealing damage
 		otherBefore = other.health
@@ -118,7 +128,8 @@ class Military(Unit):
 
 class Land(Military):
 	def battle(self,other):
-		if not isinstance(other,Land): assert (False)
+		if not (isinstance(other,Land) or isinstance(other,Support)):
+			assert (False)
 		super(Land,self).battle(other)
 
 	def retaliate(self,other,selfSuccess,otherSuccess):
@@ -133,15 +144,25 @@ class Warrior(Land):
 		super(Warrior,self).__init__(atk,df,team,moves,xPos,yPos,sight,health)
 
 	def __str__(self):
-		print "atk: " + str(self.atk)
-		print "df: " + str(self.df)
-		print "moves: " + str(self.moves)
-		print "sight: " + str(self.sight)
+		#print "atk: " + str(self.atk)
+		#print "df: " + str(self.df)
+		#print "moves: " + str(self.moves)
+		#print "sight: " + str(self.sight)
 		print "health: " + str(self.health)
-		print "rank: " + str(self.rank)
-		print "exp: " + str(self.exp)
-		print type(self)
-		print "Land: " +  str(isinstance(self,Land))
-		print "Military: " + str(isinstance(self,Military))
-		print "Unit: " + str(isinstance(self,Unit))
+		#print "rank: " + str(self.rank)
+		#print "exp: " + str(self.exp)
+		#print type(self)
+		#print "Land: " +  str(isinstance(self,Land))
+		#print "Military: " + str(isinstance(self,Military))
+		#print "Unit: " + str(isinstance(self,Unit))
 		return ""
+
+class Support(Unit):
+	def lose(self,other):
+		assert isinstance(other,Military)
+		if self.state == "neutral":
+			self.team = other.team
+
+class Settler(Support):
+	def settle(self):
+		Unit.unitDict[(self.xPos,self.yPos)].remove(self)
