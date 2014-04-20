@@ -95,6 +95,8 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 		mRed = ((1.0*adj30-r)/adj60) #slope for red lines
 		#see concept "Board With Lines.png" if unclear
 		mseX,mseY = event.x,event.y
+		if (mseX > self.right or mseX < self.left or mseY > self.bottom or 
+			mseY < self.top): return
 		mseX -= self.adjX
 		mseY -= self.adjY
 		yIntBlue = mseY - self.top - (mseX-self.left)*mBlue
@@ -127,38 +129,63 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 			self.selected = False
 
 	def keyPressed(self,event): #mainly for testing; as moving uses the mouse in game
+		keyAdj = 20
 		if event.keysym == "z": self.indexA -= 2 #move the "dot" #left
 		elif event.keysym == "s": self.indexB -= 1 #up
 		elif event.keysym == "x": self.indexB += 1 #down
 		elif event.keysym == "c": self.indexA += 2 #right
 		elif event.keysym == "d": self.coords = not(self.coords) #superimpose
 														   #numbers over tiles
-		elif event.keysym == "Up": self.adjY -= 5
-		elif event.keysym == "Down": self.adjY += 5
-		elif event.keysym == "Right": self.adjX += 5
-		elif event.keysym == "Left": self.adjX -= 5
+		elif event.keysym == "Up":
+			if not self.bottomEdge-keyAdj<=self.bottom:
+				self.adjY -= keyAdj
+			else:
+				self.adjY += self.bottom-self.bottomEdge #stop
+				#self.ajdY = 0 #wrap around
+		elif event.keysym == "Down":
+			if not self.topEdge+keyAdj>=self.top:
+				self.adjY += keyAdj
+			else:
+				self.adjY = 0 #stop
+				#self.adjY += self.bottom-self.bottomEdge #wrap-around
+		elif event.keysym == "Right":
+			if not self.leftEdge+keyAdj>=self.left:
+				self.adjX += keyAdj
+			else:
+				self.adjX = 0 #stop
+				#self.adjX += self.right-self.rightEdge #wrap-around
+		elif event.keysym == "Left":
+			if not self.rightEdge-keyAdj<=self.right:
+				self.adjX -= keyAdj
+			else:
+				self.adjX += self.right-self.rightEdge #stop
+				#self.adjX = 0 #wrap around
 		#print self.indexA,self.indexB
 
 	def drawBoard(self): #for each tile object, draws a hexagon
+		adj60,adj30,left,top,r = self.adj60,self.adj30,self.left,self.top,self.r
+		rows,cols = self.rows-1,self.cols-1
+		self.leftEdge = left+self.adjX
+		self.rightEdge = left+2*adj60+self.adjX+(self.cols-1)*adj60
+		self.topEdge = top+self.adjY
+		self.bottomEdge = top + r if rows%2 == 0 else top+2*r+adj30+self.adjY
+		self.bottomEdge += rows/2*2*(r+adj30) + r
 		for tile in Tile.tileSet:
 			cx,cy,r = tile.cx,tile.cy,tile.r
-			adj60, adj30 = self.adj60,self.adj30
 			cx += self.adjX
 			cy += self.adjY
 			if ((self.right+2*self.adj60>cx>self.left-2*adj60) and
 				(self.bottom+2*r>cy>self.top-2*r)):
 				self.canvas.create_polygon(cx,          cy-r,
 										   cx+adj60,    cy-adj30,
-										   #m = (int(adj60)/(r-adj30))
 										   cx+adj60,    cy+adj30,
 										   cx,          cy+r,
-										   #m = (int(adj60)/(adj30-r))
 										   cx-adj60,    cy+adj30,
 										   cx-adj60,    cy-adj30,
 										   fill = "white", outline = "black",
 										   width = r/50)#line width heuristic
 				if self.coords:self.canvas.create_text(cx,cy,text="%d,%d"%(
-					tile.indexA,tile.indexB)) #superimpose numbers
+					tile.indexA,tile.indexB),font="Helvetica %d" % (int(self.r/1.5))) #superimpose numbers
 		self.canvas.create_rectangle(self.left,self.top,self.right,self.bottom)
 		#bounding rectangle to show what the board actually is
 
@@ -169,7 +196,6 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 		adj60, adj30 = r*(3**.5)/2, r/2.0 #distances corresponding to the sides
 			 #opposide the 30 and 60 degree angles of triangles in the hexagons
 		self.adj60,self.adj30,self.top,self.left,self.r=adj60,adj30,top,left,r
-		print r, adj60,adj30
 		for colPos1 in xrange(0,self.cols,2):
 			for rowPos1 in xrange(0,self.rows,2):
 				Tile(colPos1,rowPos1,r,adj60,left,top,adj30)
@@ -188,11 +214,13 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 		cy += self.adjY
 		color = "black"
 		if self.selected: color = "yellow"
+		if (cx > self.right or cx < self.left or cy > self.bottom or 
+			cy < self.top): return
 		self.canvas.create_oval(cx-5,cy-5,cx+5,cy+5,fill = color)
 		#the dot, which represents a unit, has an arbitrary radius of 5
 
 	def init(self): #initializes the animation
-		self.initBoard(50,50,self.width-50,self.height-50)
+		self.initBoard(25,25,self.width-25,self.height-25)
 		#"in-shifted" by 25 to show that program works even if the boundaries
 		#are not the edges
 		self.indexA = 0
@@ -206,7 +234,7 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 		self.drawBoard()
 		self.drawPosition(self.indexA,self.indexB)
 
-MoveEngine().run(100,100)
+MoveEngine().run(50,50)
 
 def testAll():
 	print
