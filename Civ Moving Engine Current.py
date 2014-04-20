@@ -70,15 +70,6 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 					self.selected = False
 		#print self.selected
 
-	def mousePressed(self,event):
-		adj60,adj30,r = self.adj60,self.adj30,self.r
-		mBlue = ((1.0*r-adj30)/int(adj60)) #slope for blue lines
-		mRed = ((1.0*adj30-r)/int(adj60)) #slope for red lines
-		#print mBlue
-		#see concept "Board With Lines.png" if unclear
-		mseX,mseY = event.x,event.y
-		yIntBlue = 1
-
 	def keyPressed(self,event): #mainly for testing; moving uses the mouse
 		if event.keysym == "Left": self.indexA -= 2 #move the "dot"
 		elif event.keysym == "Up": self.indexB -= 1
@@ -149,7 +140,7 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 		#the dot, which represents a unit, has an arbitrary radius of 5
 
 	def init(self): #initializes the animation
-		self.initBoard(25,25,self.width-25,self.height-25,25)
+		self.initBoard(25,25,self.width-25,self.height-25,7)
 		#"in-shifted" by 25 to show that program works even if the boundaries
 		#are not the edges
 		self.indexA = 0

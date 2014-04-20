@@ -6,6 +6,7 @@
 from Tkinter import *
 import random
 import math
+from fractions import Fraction
 
 def specialInt(x): #rounds down for all cases, not just towards 0
 	assert (type(x) == int or type(x) == float)
@@ -29,9 +30,10 @@ class Animation(object): #From Kosbie email;expanded sligtly from stock code
 	def redrawAll(self): pass
 	def mouseReleased(self,event): pass #added mouseReleased
 	#removed many of the comments
-	def run(self, width=500,height=500):
+	def run(self,rows=10,cols=20,width=500,height=500):
 		root = Tk()
 		self.width,self.height = width,height
+		self.rows,self.cols = rows,cols
 		self.canvas = Canvas(root, width=width, height=height)
 		self.canvas.configure(bd = 0, highlightthickness = 0) #added
 		self.canvas.pack()
@@ -50,7 +52,7 @@ class Animation(object): #From Kosbie email;expanded sligtly from stock code
 		root.bind("<Button-1>", mousePressedWrapper)
 		root.bind("<Key>", keyPressedWrapper)
 		root.bind("<B1-ButtonRelease>",mouseReleasedWrapper)
-		self.timerFiredDelay = 200 # milliseconds
+		self.timerFiredDelay = 20 # milliseconds
 		def timerFiredWrapper():
 			self.timerFired()
 			redrawAllWrapper()
@@ -60,17 +62,17 @@ class Animation(object): #From Kosbie email;expanded sligtly from stock code
 		root.mainloop()
 
 class Tile(object): #tiles that make up the board
-	tileList = [] #list of all tiles to iterate through
+	tileSet = set() #list of all tiles to iterate through
 	def __init__(self,colPos,rowPos,r,adj60,left,top,adj30): #initializes each tile
 		cx = left + adj60 + colPos * adj60
 		cy = top + r if rowPos%2 == 0 else top+2*r+adj30
 		cy += rowPos/2*2*(r+adj30)
 		self.cx,self.cy,self.r = cx,cy,r
 		self.indexA,self.indexB = colPos,rowPos
-		Tile.tileList.append(self)
+		Tile.tileSet.add(self)
 
 class MoveEngine(Animation): #basis of the "board" and how things will move
-	def mousePressed(self,event):
+	def mousePressedOld(self,event):
 		if not(self.selected): #select a "unit"
 			for tile in Tile.tileList:
 				if ((((event.x-tile.cx)**2+(event.y-tile.cy)**2)**.5 <= 
@@ -105,7 +107,22 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 		#		print "left"
 			else: pass
 		#		print "right"
-		print bFloor,rFloor
+		indexA,indexB = -1,Fraction(1,3)
+		indexA += rFloor
+		indexB += Fraction(1,3)*rFloor
+		indexA -= bFloor
+		indexB += Fraction(1,3)*bFloor
+		if (bFloor+rFloor)%3 == 0:
+			if blueNum % 1 > redNum % 1: indexA -= 1
+			else: indexA += 1
+		indexA,indexB = int(math.floor(indexA)),int(math.floor(indexB))
+		if not self.selected:
+			if (self.indexA == indexA) and (self.indexB == indexB):
+				self.selected = True
+		else:
+			self.indexA = indexA
+			self.indexB = indexB
+			self.selected = False
 
 	def keyPressed(self,event): #mainly for testing; as moving uses the mouse in game
 		if event.keysym == "Left": self.indexA -= 2 #move the "dot"
@@ -117,7 +134,7 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 		#print self.indexA,self.indexB
 
 	def drawBoard(self): #for each tile object, draws a hexagon
-		for tile in Tile.tileList:
+		for tile in Tile.tileSet:
 			cx,cy,r = tile.cx,tile.cy,tile.r
 			adj60, adj30 = r*(3**.5)/2, r/2.0 #30,60,90 triangles have sides of
 			#a, a*(3**.5), and 2a. In this case a = r/2.
@@ -144,11 +161,11 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 			 #opposide the 30 and 60 degree angles of triangles in the hexagons
 		self.adj60,self.adj30,self.top,self.left,self.r=adj60,adj30,top,left,r
 		print r, adj60,adj30
-		for colPos1 in xrange(0,20,2):
-			for rowPos1 in xrange(0,10,2):
+		for colPos1 in xrange(0,self.cols,2):
+			for rowPos1 in xrange(0,self.rows,2):
 				Tile(colPos1,rowPos1,r,adj60,left,top,adj30)
-		for colPos2 in xrange(1,20,2): #easier to iterate every other row, separately
-			for rowPos2 in xrange(1,10,2):
+		for colPos2 in xrange(1,self.cols,2): #easier to iterate every other row, separately
+			for rowPos2 in xrange(1,self.rows,2):
 				Tile(colPos2,rowPos2,r,adj60,left,top,adj30)
 
 	def drawPosition(self,indexA,indexB): #draws dot: hypothetical unit
@@ -179,7 +196,7 @@ class MoveEngine(Animation): #basis of the "board" and how things will move
 		self.drawBoard()
 		self.drawPosition(self.indexA,self.indexB)
 
-MoveEngine().run()
+MoveEngine().run(15,24)
 
 def testAll():
 	print
