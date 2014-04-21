@@ -2,6 +2,7 @@
 #"dot" "shifts" to the right for larger numbers --> (floating point errors?)
 #determine indecies in initBoard! Do not wait to extrapolate in __init__ --> Done!
 #Do gross math for efficient mouse click search.... --> Yay!
+#rewrite the unitAction function. Try/Except is killing everything.
 
 from Tkinter import *
 import random
@@ -127,18 +128,15 @@ class Unit(object): #generic unit class
 		self.defaultMoves = moves #num of moves per turn --> to reset
 		self.selected = selected
 
-	def move(self,indexA,indexB):
-		deltaX = abs(self.xPos-indexA)
-		deltaY = abs(self.yPos-indexB)
-		deltaTotal = (deltaX+deltaY)/2
-		print self.moves
-		if self.moves>=deltaTotal:
+	def move(self,indexA,indexB,moveDict):
+		if (indexA,indexB) not in moveDict: return
+		else:
 			Unit.unitDict[(self.xPos,self.yPos)].remove(self)
-			self.moves-=deltaTotal
 			self.xPos,self.yPos = indexA,indexB
 			try: Unit.unitDict[(self.xPos,self.yPos)].add(self)
 			except: Unit.unitDict[(self.xPos,self.yPos)] = set([self])
-		print self.moves
+			if len(Unit.unitDict[(self.xPos,self.yPos)])>1: assert(False)
+			self.moves -= moveDict[(self.xPos,self.yPos)]
 
 	def reset(self):
 		#to reset moves each turn
@@ -287,36 +285,37 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		#	self.selected = False
 
 	def unitAction(self,indexA,indexB):
-		if self.selectedUnit == None:
-			try:
-				unit = self.unpackTile(indexA,indexB)
-				if unit.team == self.player:
-					self.selectUnit(unit)
-				print "not selected: try"
-			except:
-				print "not selected: except"
-				return
-		else:
-			try:
-				unit = self.unpackTile(indexA,indexB)
-				if unit.team == self.selectedUnit.team == self.player:
-					self.selectUnit(unit)
-				print "selected: try"
-			except:
-				self.selectedUnit.move(indexA,indexB)
+		unpackedTile = self.unpackTile(indexA,indexB)
+		if self.selectedUnit:
+			if isinstance(unpackedTile,Unit):
+				if unpackedTile.team == self.player:
+					self.selectUnit(unpackedTile)
+				elif unpackedTile.team != self.player:
+					pass #INTERACT!
+			elif (indexA,indexB) in self.moveDict:
+				self.selectedUnit.move(indexA,indexB,self.moveDict)
 				self.deselectCurrentlySelectedUnit()
-				print "selected: except"
+			else:
+				deselectCurrentlySelectedUnit
+		else:
+			if isinstance(unpackedTile,Unit):
+				if unpackedTile.team == self.player:
+					self.selectUnit(unpackedTile)
+				elif unpackedTile.team != self.player:
+					pass #DISPLAY INFORMATION
 
 	def unpackTile(self,indexA,indexB):
-		clickedTileSet = Unit.unitDict[(indexA,indexB)]
-		clickedTileUnitList = list(clickedTileSet)
-		if len(clickedTileUnitList) == 1:
-			unit = clickedTileUnitList[0]
-			return unit
-		elif len(clickedTileUnitList) == 0:
-			return
-		else:
-			assert(False) #figure out whether/how to deal with multiple units
+		if (indexA,indexB) in Unit.unitDict:
+			clickedTileSet = Unit.unitDict[(indexA,indexB)]
+			clickedTileUnitList = list(clickedTileSet)
+			if len(clickedTileUnitList) == 1:
+				unit = clickedTileUnitList[0]
+				return unit
+			elif len(clickedTileUnitList) == 0:
+				return
+			else:
+				assert(False) #figure out whether/how to deal with multiple units
+		return 42
 
 	def selectUnit(self,unit):
 		self.deselectCurrentlySelectedUnit()
@@ -484,7 +483,8 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 				if (cx > self.right or cx < self.left or cy > self.bottom or 
 					cy < self.top): continue
 				self.canvas.create_oval(cx-5,cy-5,cx+5,cy+5,fill = color)
-		else: pass
+		else:
+			self.moveSet = self.moveDict = None
 
 	def findMovableTiles(self):
 		indexA = self.selectedUnit.xPos
@@ -496,14 +496,10 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 			self.findNMovesAway(indexA,indexB,move)
 
 	def findNMovesAway(self,indexA,indexB,n):
-		self.count += 1
 		boundingBoxMoves = self.findBoundingBoxMoves(indexA,indexB,n)
 		diamondMovesGivenSet = self.findDiamondMovesGivenSet(indexA,indexB,n,
 			boundingBoxMoves)
 		legalMovesForN = diamondMovesGivenSet
-		if self.count < 2:
-			print boundingBoxMoves
-			print legalMovesForN
 		for move in legalMovesForN:
 			self.moveDict[move] = n
 			self.moveSet.add(move)
@@ -542,14 +538,13 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		self.showUnits = True
 		self.selectedUnit = None
 		self.player = "blue"
-		self.count = 0
 
 	def redrawAll(self): #redraws all
 		self.drawBoard()
 		if self.showUnits: self.drawUnits()
 		#self.drawPosition(self.indexA,self.indexB)
 
-PartialGame().run(30,60)
+PartialGame().run(30,30)
 
 def testAll():
 	pass
