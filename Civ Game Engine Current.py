@@ -288,15 +288,18 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		unpackedTile = self.unpackTile(indexA,indexB)
 		if self.selectedUnit:
 			if isinstance(unpackedTile,Unit):
-				if unpackedTile.team == self.player:
+				if (unpackedTile.team == self.player and
+					unpackedTile != self.selectedUnit):
 					self.selectUnit(unpackedTile)
+				elif unpackedTile == self.selectedUnit:
+					self.deselectCurrentlySelectedUnit()
 				elif unpackedTile.team != self.player:
 					pass #INTERACT!
 			elif (indexA,indexB) in self.moveDict:
 				self.selectedUnit.move(indexA,indexB,self.moveDict)
 				self.deselectCurrentlySelectedUnit()
 			else:
-				deselectCurrentlySelectedUnit
+				self.deselectCurrentlySelectedUnit()
 		else:
 			if isinstance(unpackedTile,Unit):
 				if unpackedTile.team == self.player:
