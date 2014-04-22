@@ -231,6 +231,7 @@ class Settler(Support):
 
 	def settle(self):
 		Unit.unitDict[(self.xPos,self.yPos)].remove(self)
+		City(self.team,self.xPos,self.yPos)
 
 class Tile(object): #tiles that make up the board
 	tileSet = set() #list of all tiles to iterate through
@@ -241,6 +242,43 @@ class Tile(object): #tiles that make up the board
 		self.cx,self.cy,self.r = cx,cy,r
 		self.indexA,self.indexB = colPos,rowPos
 		Tile.tileSet.add(self)
+
+class City(object):
+	cityDict = {}
+
+	citySet = set()
+
+	productionOptions = set() #how to get production options...?
+
+	productionCost = {} #create this before the game
+	#ex --> {"Warrior" : 2}
+
+	def __init__(self,team,xPos,yPos):
+		#population,area of influence,
+		#attack, defense, health?
+		City.citySet.add(self)
+		try: City.cityDict[(xPos,yPos)].add(self)
+		except: City.cityDict[(xPos,yPos)] = set([self])
+		self.team = team
+		self.xPos = xPos
+		self.yPos = yPos
+		self.currentProduction = 0
+
+	def determineProductionLevel(self):
+		pass
+		#this is a funciton of population,resources,building,etc
+
+	def produceShields(self):
+		productionLevel = self.determineProductionLevel()
+		self.currentProduction += productionLevel if productionLevel > 0 else 0
+
+	def createUnit(self,unitType):
+		unitCost = City.productionCost[unitType]
+		if unitCost <= self.currentProduction:
+			createStr = "%s(%s,%d,%d)" % (unitType,self.team,
+				self.xPos,self.yPos)
+			self.currentProduction -= unitCost
+
 
 class PartialGame(Animation): #basis of the "board" and how things will move
 
@@ -528,6 +566,8 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		return legalMoveSet
 
 	def init(self): #initializes the animation
+		#add inital production options in init
+		#add consequent production options in science engine
 		self.initBoard(25,25,self.width-25,self.height-25)
 		self.initUnits()
 		#"in-shifted" by 25 to show that program works even if the boundaries
