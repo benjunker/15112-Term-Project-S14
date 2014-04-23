@@ -18,9 +18,9 @@ class Animation(object): #From Kosbie email;expanded sligtly from stock code
 	def redrawAll(self): pass
 	def mouseReleased(self,event): pass #added mouseReleased
 	#removed many of the comments
-	def run(self,rows=10,cols=20,width=500,height=500):#new args
+	def run(self,rows=10,cols=20,width=750,height=500):#new args
 		root = Tk()
-		self.width,self.height = width,height
+		self.canvasWidth,self.canvasHeight = width,height
 		self.rows,self.cols = rows,cols
 		self.canvas = Canvas(root, width=width, height=height)
 		self.canvas.configure(bd = 0, highlightthickness = 0) #added
@@ -31,7 +31,7 @@ class Animation(object): #From Kosbie email;expanded sligtly from stock code
 		def mousePressedWrapper(event):
 			self.mousePressed(event)
 			redrawAllWrapper()
-		def mouseReleasedWrapper(event):
+		def mouseReleasedWrapper(event): #NEW
 			self.mouseReleased(event)
 			redrawAllWrapper()
 		def keyPressedWrapper(event):
@@ -49,7 +49,19 @@ class Animation(object): #From Kosbie email;expanded sligtly from stock code
 		timerFiredWrapper()
 		root.mainloop()
 
-class Unit(object): #generic unit class
+class Interactable(object):
+	interSet = set()
+
+	interDict = {}
+
+	def __init__(self):
+		Interactable.interSet.add(self)
+		xPos,yPos = self.xPos,self.yPos
+		try: Interactable.interDict[(xPos,yPos)].add(self)
+		except: Interactable.interDict[(xPos,yPos)] = set([self])
+
+
+class Unit(Interactable): #generic unit class
 	unitDict = {}
 
 	unitSet = set()
@@ -128,20 +140,24 @@ class Unit(object): #generic unit class
 		self.state = state #game state (ie-neutral,fortitified,etc)
 		self.defaultMoves = moves #num of moves per turn --> to reset
 		self.selected = selected
+		self.battled = False
+		super(Unit,self).__init__()
 
 	def move(self,indexA,indexB,moveDict):
 		if (indexA,indexB) not in moveDict: return
 		else:
-			Unit.unitDict[(self.xPos,self.yPos)].remove(self)
-			self.xPos,self.yPos = indexA,indexB
-			try: Unit.unitDict[(self.xPos,self.yPos)].add(self)
-			except: Unit.unitDict[(self.xPos,self.yPos)] = set([self])
-			if len(Unit.unitDict[(self.xPos,self.yPos)])>1: assert(False)
-			self.moves -= moveDict[(self.xPos,self.yPos)]
+			if (indexA,indexB) not in City.cityDict:
+				Unit.unitDict[(self.xPos,self.yPos)].remove(self)
+				self.xPos,self.yPos = indexA,indexB
+				try: Unit.unitDict[(self.xPos,self.yPos)].add(self)
+				except: Unit.unitDict[(self.xPos,self.yPos)] = set([self])
+				if len(Unit.unitDict[(self.xPos,self.yPos)])>1: assert(False)
+				self.moves -= moveDict[(self.xPos,self.yPos)]
 
 	def reset(self):
 		#to reset moves each turn
 		self.moves = self.defaultMoves
+		self.battled = False
 
 	def battleSuccess(self): pass
 	def battle(self): pass
@@ -171,8 +187,19 @@ class Military(Unit):
 			otherSuccess = other.battleSuccess()
 			self.attack(other,selfSuccess,otherSuccess)
 			other.retaliate(self,selfSuccess,otherSuccess)
+			self.checkLife()
+			other.checkLife()
+			print self.health,other.health
 		elif isinstance(other,Support):
 			other.lose(self)
+		self.battled = True
+		self.moves = 0
+		self.checkLife()
+
+	def checkLife(self):
+		if self.health <= 0:
+			Unit.unitDict[(self.xPos,self.yPos)].remove(self)
+			Unit.unitSet.remove(self)
 
 	def attack(self,other,selfSuccess,otherSuccess): #dealing damage
 		otherBefore = other.health
@@ -232,6 +259,7 @@ class Settler(Support):
 
 	def settle(self):
 		Unit.unitDict[(self.xPos,self.yPos)].remove(self)
+		Unit.unitSet.remove(self)
 		City(self.team,self.xPos,self.yPos)
 
 class Tile(object): #tiles that make up the board
@@ -244,15 +272,16 @@ class Tile(object): #tiles that make up the board
 		self.indexA,self.indexB = colPos,rowPos
 		Tile.tileSet.add(self)
 
-class City(object):
+class City(Interactable):
 	cityDict = {}
 
 	citySet = set()
 
 	productionOptions = set() #how to get production options...?
 
-	productionCost = {} #create this before the game
-	#ex --> {"Warrior" : 2}
+	productionCost = {"Warrior" : 5,
+					  "Settler" : 8} #create this before the game
+						  #ex --> {"Warrior" : 2}
 
 	def __init__(self,team,xPos,yPos):
 		#population,area of influence,
@@ -264,9 +293,11 @@ class City(object):
 		self.xPos = xPos
 		self.yPos = yPos
 		self.currentProduction = 0
+		self.selected = False
+		super(City,self).__init__()
 
 	def determineProductionLevel(self):
-		pass
+		return 2 #heuristic, for now
 		#this is a funciton of population,resources,building,etc
 
 	def produceShields(self):
@@ -276,45 +307,53 @@ class City(object):
 	def createUnit(self,unitType):
 		unitCost = City.productionCost[unitType]
 		if unitCost <= self.currentProduction:
-			createStr = "%s(%s,%d,%d)" % (unitType,self.team,
-				self.xPos,self.yPos)
-			self.currentProduction -= unitCost
-
+			xPos = self.xPos + 1
+			yPos = self.yPos + 1
+			try: city = City.cityDict[(xPos,yPos)]
+			except: city = None
+			try: unit = Unit.unitDict[(xPos,yPos)]
+			except: unit = None
+			if not(city or unit):
+				createStr = "%s(\"%s\",%d,%d)" % (unitType,self.team,
+					self.xPos+1,self.yPos+1)
+				self.currentProduction -= unitCost
+				eval(createStr)
 
 class PartialGame(Animation): #basis of the "board" and how things will move
 
 	def mousePressed(self,event):
-		adj60,adj30,r = self.adj60,self.adj30,self.r
-		mBlue = ((1.0*r-adj30)/adj60) #slope for blue lines
-		mRed = ((1.0*adj30-r)/adj60) #slope for red lines
-		#see concept "Board With Lines.png" if unclear
-		mseX,mseY = event.x,event.y
-		if (mseX > self.right or mseX < self.left or mseY > self.bottom or 
-			mseY < self.top): return
-		mseX -= self.adjX
-		mseY -= self.adjY
-		yIntBlue = mseY - self.top - (mseX-self.left)*mBlue
-		yIntRed = mseY - self.top - (mseX-self.left)*mRed
-		blueNum = (yIntBlue - adj30)/(2*adj30)
-		redNum = (yIntRed - adj30)/(2*adj30)
-		bFloor = int(math.floor(blueNum)) #changed from specialInt
-		rFloor = int(math.floor(redNum))  #^this
-		#print "b: " + str(blueNum) + "," + "r: " + str(redNum)
-		if (bFloor+rFloor)%3 == 0:
-			if blueNum % 1 > redNum % 1: pass
-		#		print "left"
-			else: pass
-		#		print "right"
-		indexA,indexB = -1,Fraction(1,3)
-		indexA += rFloor
-		indexB += Fraction(1,3)*rFloor
-		indexA -= bFloor
-		indexB += Fraction(1,3)*bFloor
-		if (bFloor+rFloor)%3 == 0:
-			if blueNum % 1 > redNum % 1: indexA -= 1
-			else: indexA += 1
-		indexA,indexB = int(math.floor(indexA)),int(math.floor(indexB))
-		self.unitAction(indexA,indexB)
+		if not(self.splashScreen) and not(self.help):
+			adj60,adj30,r = self.adj60,self.adj30,self.r
+			mBlue = ((1.0*r-adj30)/adj60) #slope for blue lines
+			mRed = ((1.0*adj30-r)/adj60) #slope for red lines
+			#see concept "Board With Lines.png" if unclear
+			mseX,mseY = event.x,event.y
+			if (mseX > self.right or mseX < self.left or mseY > self.bottom or 
+				mseY < self.top): return
+			mseX -= self.adjX
+			mseY -= self.adjY
+			yIntBlue = mseY - self.top - (mseX-self.left)*mBlue
+			yIntRed = mseY - self.top - (mseX-self.left)*mRed
+			blueNum = (yIntBlue - adj30)/(2*adj30)
+			redNum = (yIntRed - adj30)/(2*adj30)
+			bFloor = int(math.floor(blueNum)) #changed from specialInt
+			rFloor = int(math.floor(redNum))  #^this
+			#print "b: " + str(blueNum) + "," + "r: " + str(redNum)
+			if (bFloor+rFloor)%3 == 0:
+				if blueNum % 1 > redNum % 1: pass
+			#		print "left"
+				else: pass
+			#		print "right"
+			indexA,indexB = -1,Fraction(1,3)
+			indexA += rFloor
+			indexB += Fraction(1,3)*rFloor
+			indexA -= bFloor
+			indexB += Fraction(1,3)*bFloor
+			if (bFloor+rFloor)%3 == 0:
+				if blueNum % 1 > redNum % 1: indexA -= 1
+				else: indexA += 1
+			indexA,indexB = int(math.floor(indexA)),int(math.floor(indexB))
+			self.unitAction(indexA,indexB)
 		#if not self.selected:
 		#	if (self.indexA == indexA) and (self.indexB == indexB):
 		#		self.selected = True
@@ -333,20 +372,37 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 				elif unpackedTile == self.selectedUnit:
 					self.deselectCurrentlySelectedUnit()
 				elif unpackedTile.team != self.player:
-					pass #INTERACT!
+					if (not self.selectedUnit.battled and
+						self.selectedUnit.moves > 0 and
+						self.moveDict[(unpackedTile.xPos,unpackedTile.yPos)]==1
+						):
+						self.selectedUnit.battle(unpackedTile)
+						self.deselectCurrentlySelectedUnit()
 			elif (indexA,indexB) in self.moveDict:
 				self.selectedUnit.move(indexA,indexB,self.moveDict)
 				self.deselectCurrentlySelectedUnit()
 			else:
 				self.deselectCurrentlySelectedUnit()
+		elif self.selectedCity:
+			self.deselectCurrentlySelectedUnit()
 		else:
-			if isinstance(unpackedTile,Unit):
+			if isinstance(unpackedTile,Interactable):
 				if unpackedTile.team == self.player:
 					self.selectUnit(unpackedTile)
 				elif unpackedTile.team != self.player:
-					pass #DISPLAY INFORMATION
+					pass #DISPLAY INFORMATION...or mouse hover?
 
 	def unpackTile(self,indexA,indexB):
+		if (indexA,indexB) in City.cityDict:
+			clickedTileSet = City.cityDict[(indexA,indexB)]
+			clickedTileUnitList = list(clickedTileSet)
+			if len(clickedTileUnitList) == 1:
+				unit = clickedTileUnitList[0]
+				return unit
+			elif len(clickedTileUnitList) == 0:
+				return
+			else:
+				assert(False) #figure out whether/how to deal with multiple units
 		if (indexA,indexB) in Unit.unitDict:
 			clickedTileSet = Unit.unitDict[(indexA,indexB)]
 			clickedTileUnitList = list(clickedTileSet)
@@ -357,17 +413,20 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 				return
 			else:
 				assert(False) #figure out whether/how to deal with multiple units
-		return 42
 
 	def selectUnit(self,unit):
 		self.deselectCurrentlySelectedUnit()
 		unit.selected = True
-		self.selectedUnit = unit
+		if isinstance(unit,Unit): self.selectedUnit = unit
+		else: self.selectedCity = unit
 
 	def deselectCurrentlySelectedUnit(self):
 		if self.selectedUnit:
 			self.selectedUnit.selected = False
 			self.selectedUnit = None
+		elif self.selectedCity:
+			self.selectedCity.selected = False
+			self.selectedCity = None
 
 	def deselectAllUnits(self): #possibly never used
 		for everyUnit in Unit.unitSet:
@@ -376,52 +435,68 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 
 	def keyPressed(self,event): #mainly for testing; as moving uses the mouse in game
 		keyAdj = 20
-		#if event.keysym == "z": self.indexA -= 2 #move the "dot" #left
-		#elif event.keysym == "s": self.indexB -= 1 #up
-		#elif event.keysym == "x": self.indexB += 1 #down
-		#elif event.keysym == "c": self.indexA += 2 #right
+		if not(self.splashScreen) and not(self.help):
+			if event.keysym == "Up":
+				if not self.bottomEdge-keyAdj<=self.bottom:
+					self.adjY -= keyAdj
+				else:
+					self.adjY += self.bottom-self.bottomEdge #stop
+					#self.adjY = 0 #wrap around
+			elif event.keysym == "Down":
+				if not self.topEdge+keyAdj>=self.top:
+					self.adjY += keyAdj
+				else:
+					self.adjY = 0 #stop
+					#self.adjY += self.bottom-self.bottomEdge #wrap-around
+			elif event.keysym == "Right":
+				if not self.leftEdge+keyAdj>=self.left:
+					self.adjX += keyAdj
+				else:
+					self.adjX = 0 #stop
+					#self.adjX += self.right-self.rightEdge #wrap-around
+			elif event.keysym == "Left":
+				if not self.rightEdge-keyAdj<=self.right:
+					self.adjX -= keyAdj
+				else:
+					self.adjX += self.right-self.rightEdge #stop
+					#self.adjX = 0 #wrap around
 		if event.keysym == "d": self.coords = not(self.coords) #superimpose
 														   #numbers over tiles
-		elif event.keysym == "Up":
-			if not self.bottomEdge-keyAdj<=self.bottom:
-				self.adjY -= keyAdj
-			else:
-				self.adjY += self.bottom-self.bottomEdge #stop
-				#self.ajdY = 0 #wrap around
-		elif event.keysym == "Down":
-			if not self.topEdge+keyAdj>=self.top:
-				self.adjY += keyAdj
-			else:
-				self.adjY = 0 #stop
-				#self.adjY += self.bottom-self.bottomEdge #wrap-around
-		elif event.keysym == "Right":
-			if not self.leftEdge+keyAdj>=self.left:
-				self.adjX += keyAdj
-			else:
-				self.adjX = 0 #stop
-				#self.adjX += self.right-self.rightEdge #wrap-around
-		elif event.keysym == "Left":
-			if not self.rightEdge-keyAdj<=self.right:
-				self.adjX -= keyAdj
-			else:
-				self.adjX += self.right-self.rightEdge #stop
-				#self.adjX = 0 #wrap around
 		elif event.keysym == "u": self.showUnits = not(self.showUnits)
 		elif event.keysym == "space":
-			self.switchPlayer()
-			self.deselectCurrentlySelectedUnit()
-			self.resetUnits() #happens at the beginning of the turn
-			print self.player
+			if self.splashScreen:
+				self.splashScreen = not(self.splashScreen)
+			else:
+				self.switchPlayer()
+				self.deselectCurrentlySelectedUnit()
+				self.reset() #happens at the beginning of the turn
+		elif event.keysym == "h":
+			self.help = not(self.help)
+		elif event.keysym == "s":
+			if self.selectedUnit:
+				if isinstance(self.selectedUnit,Settler):
+					self.selectedUnit.settle()
+					self.deselectCurrentlySelectedUnit()
+			elif self.selectedCity:
+				self.selectedCity.createUnit("Settler")
+				self.deselectCurrentlySelectedUnit()
+		elif event.keysym == "w":
+			if self.selectedCity:
+				self.selectedCity.createUnit("Warrior")
+				self.deselectCurrentlySelectedUnit()
 		#print self.indexA,self.indexB
 
 	def switchPlayer(self):
 		if self.player == "blue": self.player = "red"
 		else: self.player = "blue"
 
-	def resetUnits(self):
+	def reset(self):
 		for unit in Unit.unitSet:
 			if unit.team == self.player:
 				unit.reset()
+		for city in City.citySet:
+			if city.team == self.player:
+				city.produceShields()
 
 	def drawBoard(self): #for each tile object, draws a hexagon
 		adj60,adj30,left,top,r = self.adj60,self.adj30,self.left,self.top,self.r
@@ -443,7 +518,7 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 										   cx,          cy+r,
 										   cx-adj60,    cy+adj30,
 										   cx-adj60,    cy-adj30,
-										   fill = "white", outline = "black",
+										   fill = "#d2d2d2", outline = "black",
 										   width = r/50)#line width heuristic
 				if self.coords:self.canvas.create_text(cx,cy,text="%d,%d"%(
 					tile.indexA,tile.indexB),font="Helvetica %d" % 
@@ -451,9 +526,11 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		self.canvas.create_rectangle(self.left,self.top,self.right,self.bottom)
 		#bounding rectangle to show what the board actually is
 
-	def initBoard(self,left,top,right,bottom,r=-1): #creates tiles for board
+	def initBoard(self,cx=250,cy=250,width=400,height=400,r=-1): #creates tiles
+		left,right,top,bottom = cx-width/2,cx+width/2,cy-height/2,cy+height/2
+		self.boardCX,self.boardCY = cx,cy
 		self.left,self.top,self.right,self.bottom = left,top,right,bottom
-		self.width,self.height = width,height = abs(left-right),abs(top-bottom)
+		self.width,self.height = width,height #= abs(left-right),abs(top-bottom)
 		if r < 0: r = min(width,height)/20 #radius heuristic
 		adj60, adj30 = r*(3**.5)/2, r/2.0 #distances corresponding to the sides
 			 #opposide the 30 and 60 degree angles of triangles in the hexagons
@@ -486,6 +563,7 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		Settler("blue",6,6)
 		Warrior("red",1,1)
 		Warrior("blue",5,5)
+		City("blue",7,5)
 
 	def drawUnits(self):
 		left,adj60,top,r,adj30=self.left,self.adj60,self.top,self.r,self.adj30
@@ -502,6 +580,26 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 				cy < self.top): continue #don't draw if outside scope
 			color = unit.team
 			if unit.selected:
+				color = "yellow"
+			self.canvas.create_text(cx,cy,text = typeStr[typeStr.find(".")+1:
+				typeStr.find(".")+3],
+				anchor = CENTER,fill = color) #teams are colors for now.
+											  	#maybe have unit.color later
+
+	def drawCities(self):
+		left,adj60,top,r,adj30=self.left,self.adj60,self.top,self.r,self.adj30
+		for city in City.citySet:
+			indexA,indexB = city.xPos,city.yPos
+			cx = left + adj60 + indexA*adj60
+			cy = float(top + r) if indexB%2 == 0 else float(top+float(2*r+adj30))
+			cy += indexB/2*float(2*(r+adj30))
+			cx += self.adjX
+			cy += self.adjY
+			typeStr = str(type(city))
+			if (cx > self.right or cx < self.left or cy > self.bottom or 
+				cy < self.top): continue #don't draw if outside scope
+			color = city.team
+			if city.selected:
 				color = "yellow"
 			self.canvas.create_text(cx,cy,text = typeStr[typeStr.find(".")+1:
 				typeStr.find(".")+3],
@@ -566,10 +664,75 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 				legalMoveSet.add(move)
 		return legalMoveSet
 
+	def turnIndicator(self):
+		self.canvas.create_rectangle(5,5,15,15,fill="%s" % self.player,
+			width=2)
+
+	def drawAroundBoard(self):
+		color="#fff7d2"
+		outline = color
+		width = 2
+		self.canvas.create_rectangle(0,0,self.left,self.canvasHeight,
+			fill=color,width=width,outline=outline)
+		self.canvas.create_rectangle(self.left,0,self.right,self.top,
+			fill=color,width=width,outline=outline)
+		self.canvas.create_rectangle(self.left,self.bottom,self.right,
+			self.canvasHeight,fill=color,width=width,outline=outline)
+		self.canvas.create_rectangle(self.right,0,self.canvasWidth,
+			self.canvasHeight,fill=color,width=width,outline=outline)
+		left,top,right,bottom = self.left,self.top,self.right,self.bottom
+		self.canvas.create_line(left,top,right,top,width=width)
+		self.canvas.create_line(right,top,right,bottom,width=width)
+		self.canvas.create_line(right,bottom,left,bottom,width=width)
+		self.canvas.create_line(left,bottom,left,top,width=width)
+
+	def drawSplashScreen(self):
+		string = ""
+		string += "CIVILIZATION" + "\n\n\n\n\n"
+		string += "Press Space to Continue" + "\n"
+		string += "Press 'h' at any time for help" + "\n"
+		string += "Good Luck!"
+		self.canvas.create_text(self.canvasWidth/2,self.canvasHeight/2,
+			text = string, font = "Helvtica 24", anchor = CENTER)
+
+	def drawHelp(self):
+		string = ""
+		string += "The goal of the game is to eliminate all enemy units.\n\n"
+		string += "Blue moves first.\n\n"
+		string += "The rectangle in the upper left corner indicates whose"
+		string += " turn it is.\n\n"
+		string += "Controls:\n"
+		string += "Click on a unit to select it.\n"
+		string += "Then click a highlighted tile to move.\n"
+		string += "If there is an enemy unit on the tile you click, you are"
+		string += " right next to that tile, and you haven't used all of your"
+		string += " moves,\n\tyou will battle.\n"
+		string += "Use the arrow keys to scroll around the board.\n"
+		string += "Press Space to end your turn.\n"
+		string += "Press 's' with a Settler selected to found a City.\n"
+		string += "Press 'w' with a City selected to build a warrior and 's' "
+		string += "to build a Settler, if you have\n\tenough production"
+		string += " shields.\n"
+		string += "Cities create production shields each turn.\n"
+		string += "\nKey:\n"
+		string += "Wa : Warrior\n"
+		string += "Se : Settler\n"
+		string += "Ci : City\n\n"
+		string += "\nMechaics:\n"
+		string += "You can fight with warriors, create cities with settlers, "
+		string += "and create units with cities.\n"
+		string += "All cities gain +2 production shields per turn.\n"
+		string += "It costs 5 shields for a warrior and 8 for a settler.\n"
+		string += "\nDebug:\n"
+		string += "Press 'd' to toggle tile indicies.\n"
+		string += "Press 'u' to toggle units/cities.\n\n"
+		self.canvas.create_text(0,0,
+			text = string, font = "Helvtica 12", anchor = NW)
+
 	def init(self): #initializes the animation
 		#add inital production options in init
 		#add consequent production options in science engine
-		self.initBoard(25,25,self.width-25,self.height-25)
+		self.initBoard()
 		self.initUnits()
 		#"in-shifted" by 25 to show that program works even if the boundaries
 		#are not the edges
@@ -582,10 +745,24 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		self.showUnits = True
 		self.selectedUnit = None
 		self.player = "blue"
+		self.splashScreen = True
+		self.help = False
+		self.selectedCity = None
+		#self.initAroundBoard
 
 	def redrawAll(self): #redraws all
-		self.drawBoard()
-		if self.showUnits: self.drawUnits()
+		if self.splashScreen:
+			if self.help: self.drawHelp()
+			else: self.drawSplashScreen()
+		else: 
+			if self.help: self.drawHelp()
+			else:
+				self.drawBoard()
+				if self.showUnits:
+					self.drawUnits()
+					self.drawCities()
+				self.drawAroundBoard()
+				self.turnIndicator()
 		#self.drawPosition(self.indexA,self.indexB)
 
 PartialGame().run(30,30)
