@@ -2,7 +2,8 @@
 #"dot" "shifts" to the right for larger numbers --> (floating point errors?)
 #determine indecies in initBoard! Do not wait to extrapolate in __init__ --> Done!
 #Do gross math for efficient mouse click search.... --> Yay!
-#rewrite the unitAction function. Try/Except is killing everything.
+#rewrite the unitAction function. Try/Except is killing everything. --> Fixed!
+#Two TKinter windows for my term project?
 
 from Tkinter import *
 import random
