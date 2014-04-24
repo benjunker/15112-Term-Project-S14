@@ -1,9 +1,0 @@
-In regards to changes I made to documents from Deliverable 0:
-	I slightly expanded on/revised the actual body/content of my Project Proposal.
-	Additionally, to my Project Proposal, I included a timeline that I will follow for the remainder of the project.
-	I expanded my Competitive Analysis: slightly by elaborating on the two already existent examples, but mainly by including a new example, Warcraft III.
-	I updated my Timesheet.
-	I did not change my story board files (the .jpg files), per se (though I did move the older ones to a folder called “Older Material”); however, I did make a handful of new storyboard files, which I assert are more elaborate and explanatory.
-	I updated the photoshop storyboard file, exporting many .jpg files along the way. (Note: the photoshop file does NOT contain all iterations of the storyboard .jpg files).
-	I previously did not have any python code. Now I have two main files “Civ Moving Engine Current.py” and “Civ War Engine Current.py”. Additionally, in the “Older Material” folder, I have pervious iterations/sub-parts of the two “_______ Current.py” files. (As the names suggest, the two files contain “drafts” of the moving and war engines for my game.)
-	
