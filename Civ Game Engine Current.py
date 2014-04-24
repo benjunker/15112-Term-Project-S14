@@ -4,6 +4,7 @@
 #Do gross math for efficient mouse click search.... --> Yay!
 #rewrite the unitAction function. Try/Except is killing everything. --> Fixed!
 #Two TKinter windows for my term project?
+#No win condition, as of yet
 
 from Tkinter import *
 import random
@@ -49,16 +50,16 @@ class Animation(object): #From Kosbie email;expanded sligtly from stock code
 		timerFiredWrapper()
 		root.mainloop()
 
-class Interactable(object):
+class Interactable(object): #--> eg - Warriors, Settler, Cities, etc
 	interSet = set()
 
-	interDict = {}
+	#interDict = {}
 
 	def __init__(self):
 		Interactable.interSet.add(self)
 		xPos,yPos = self.xPos,self.yPos
-		try: Interactable.interDict[(xPos,yPos)].add(self)
-		except: Interactable.interDict[(xPos,yPos)] = set([self])
+		#try: Interactable.interDict[(xPos,yPos)].add(self)
+		#except: Interactable.interDict[(xPos,yPos)] = set([self])
 
 
 class Unit(Interactable): #generic unit class
@@ -113,7 +114,6 @@ class Unit(Interactable): #generic unit class
 				"elite"  : eliteDict,
 				"master" : masterDict}
 				#dictionary referring the ranking to the correct effectiveness
-				#dictionary
 
 	reverseEffectiveDict = {1 : "very ineffective",
 							2 : "ineffective",
@@ -194,9 +194,10 @@ class Military(Unit):
 			other.lose(self)
 		self.battled = True
 		self.moves = 0
-		self.checkLife()
+		self.checkLife() #health is temporarily displayed in console window
+						 #with the attacker's health first
 
-	def checkLife(self):
+	def checkLife(self): #health is temporarily displayed in console window
 		if self.health <= 0:
 			Unit.unitDict[(self.xPos,self.yPos)].remove(self)
 			Unit.unitSet.remove(self)
@@ -206,15 +207,19 @@ class Military(Unit):
 		damage = 3*selfSuccess*self.atk-otherSuccess*other.df
 		other.health = other.health - damage if damage>0 else other.health
 		otherAfter = other.health
+		#health is temporarily displayed in the console window
+		#attacker's health first
 
 	def retaliate(self,other,selfSuccess,otherSuccess): #retaliating after atk
 		otherBefore = other.health
 		damage = (3*selfSuccess*self.atk-otherSuccess*other.df)/2
 		other.health = other.health - damage if damage>0 else other.health
 		otherAfter = other.health
+		#health is temporarily displayed in the console window
+		#attacker's health first
 
 class Land(Military):
-	def battle(self,other):
+	def battle(self,other): #can only battle other lands, and supports
 		if not (isinstance(other,Land) or isinstance(other,Support)):
 			assert (False)
 		super(Land,self).battle(other)
@@ -245,19 +250,19 @@ class Warrior(Land):
 		#return ""
 
 class Support(Unit):
-	def lose(self,other):
+	def lose(self,other): #always lose battles to military
 		assert isinstance(other,Military)
 		if self.state == "neutral":
 			self.team = other.team
 
 class Settler(Support):
-	moves = sight = 2
+	moves = sight = 2 #arbitrary
 
 	def  __init__(self,team=None,xPos=None,yPos=None):
 		moves,sight = Settler.moves,Settler.sight
 		super(Settler,self).__init__(team,moves,xPos,yPos,sight)
 
-	def settle(self):
+	def settle(self): #make a city!
 		Unit.unitDict[(self.xPos,self.yPos)].remove(self)
 		Unit.unitSet.remove(self)
 		City(self.team,self.xPos,self.yPos)
@@ -272,12 +277,14 @@ class Tile(object): #tiles that make up the board
 		self.indexA,self.indexB = colPos,rowPos
 		Tile.tileSet.add(self)
 
-class City(Interactable):
+class City(Interactable): #Cities make units
 	cityDict = {}
 
 	citySet = set()
 
 	productionOptions = set() #how to get production options...?
+							  #--> will eventually be able to be informed by
+							  #the science tree
 
 	productionCost = {"Warrior" : 5,
 					  "Settler" : 8} #create this before the game
@@ -300,11 +307,11 @@ class City(Interactable):
 		return 2 #heuristic, for now
 		#this is a funciton of population,resources,building,etc
 
-	def produceShields(self):
+	def produceShields(self): #increase production ability. not on Tkinter yet
 		productionLevel = self.determineProductionLevel()
 		self.currentProduction += productionLevel if productionLevel > 0 else 0
 
-	def createUnit(self,unitType):
+	def createUnit(self,unitType): #creates any unit, right next to the city
 		unitCost = City.productionCost[unitType]
 		if unitCost <= self.currentProduction:
 			xPos = self.xPos + 1
@@ -362,37 +369,37 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		#	self.indexB = indexB
 		#	self.selected = False
 
-	def unitAction(self,indexA,indexB):
+	def unitAction(self,indexA,indexB): #extension of mousPressed, for unit act
 		unpackedTile = self.unpackTile(indexA,indexB)
 		if self.selectedUnit:
-			if isinstance(unpackedTile,Unit):
+			if isinstance(unpackedTile,Unit): 
 				if (unpackedTile.team == self.player and
-					unpackedTile != self.selectedUnit):
-					self.selectUnit(unpackedTile)
-				elif unpackedTile == self.selectedUnit:
+					unpackedTile != self.selectedUnit): #switch to other unit
+					self.selectUnit(unpackedTile)       #on your team
+				elif unpackedTile == self.selectedUnit: #clicked on same unit
 					self.deselectCurrentlySelectedUnit()
-				elif unpackedTile.team != self.player:
-					if (not self.selectedUnit.battled and
+				elif unpackedTile.team != self.player: #interact with other
+					if (not self.selectedUnit.battled and #unit
 						self.selectedUnit.moves > 0 and
 						self.moveDict[(unpackedTile.xPos,unpackedTile.yPos)]==1
 						):
 						self.selectedUnit.battle(unpackedTile)
 						self.deselectCurrentlySelectedUnit()
-			elif (indexA,indexB) in self.moveDict:
+			elif (indexA,indexB) in self.moveDict: #move unit
 				self.selectedUnit.move(indexA,indexB,self.moveDict)
 				self.deselectCurrentlySelectedUnit()
-			else:
+			else: #clicking elsewhere
 				self.deselectCurrentlySelectedUnit()
-		elif self.selectedCity:
+		elif self.selectedCity: #deselect city
 			self.deselectCurrentlySelectedUnit()
 		else:
 			if isinstance(unpackedTile,Interactable):
-				if unpackedTile.team == self.player:
+				if unpackedTile.team == self.player: #sepect
 					self.selectUnit(unpackedTile)
 				elif unpackedTile.team != self.player:
 					pass #DISPLAY INFORMATION...or mouse hover?
 
-	def unpackTile(self,indexA,indexB):
+	def unpackTile(self,indexA,indexB): #get thing from tile
 		if (indexA,indexB) in City.cityDict:
 			clickedTileSet = City.cityDict[(indexA,indexB)]
 			clickedTileUnitList = list(clickedTileSet)
@@ -473,16 +480,16 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		elif event.keysym == "h":
 			self.help = not(self.help)
 		elif event.keysym == "s":
-			if self.selectedUnit:
-				if isinstance(self.selectedUnit,Settler):
-					self.selectedUnit.settle()
-					self.deselectCurrentlySelectedUnit()
-			elif self.selectedCity:
+			if self.selectedCity:
 				self.selectedCity.createUnit("Settler")
 				self.deselectCurrentlySelectedUnit()
 		elif event.keysym == "w":
 			if self.selectedCity:
 				self.selectedCity.createUnit("Warrior")
+				self.deselectCurrentlySelectedUnit()
+		elif event.keysym == "c":
+			if isinstance(self.selectedUnit,Settler):
+				self.selectedUnit.settle()
 				self.deselectCurrentlySelectedUnit()
 		#print self.indexA,self.indexB
 
@@ -558,12 +565,11 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		self.canvas.create_oval(cx-5,cy-5,cx+5,cy+5,fill = color)
 		#the dot, which represents a unit, has an arbitrary radius of 5
 
-	def initUnits(self):
+	def initUnits(self): #arbitrary
 		Settler("red",0,0)
 		Settler("blue",6,6)
 		Warrior("red",1,1)
 		Warrior("blue",5,5)
-		City("blue",7,5)
 
 	def drawUnits(self):
 		left,adj60,top,r,adj30=self.left,self.adj60,self.top,self.r,self.adj30
@@ -663,12 +669,13 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 			if deltaMax>=deltaTotal:
 				legalMoveSet.add(move)
 		return legalMoveSet
+		#rectangle plus diamond makes hexagon
 
-	def turnIndicator(self):
-		self.canvas.create_rectangle(5,5,15,15,fill="%s" % self.player,
-			width=2)
+	def turnIndicator(self): #colored rectangle
+		self.canvas.create_rectangle(10,10,self.left-10,self.top-10,
+			fill="%s" % self.player,width=2)
 
-	def drawAroundBoard(self):
+	def drawAroundBoard(self): #the beige around the board
 		color="#fff7d2"
 		outline = color
 		width = 2
@@ -686,20 +693,19 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		self.canvas.create_line(right,bottom,left,bottom,width=width)
 		self.canvas.create_line(left,bottom,left,top,width=width)
 
-	def drawSplashScreen(self):
+	def drawSplashScreen(self): #starting screen
 		string = ""
-		string += "CIVILIZATION" + "\n\n\n\n\n"
-		string += "Press Space to Continue" + "\n"
-		string += "Press 'h' at any time for help" + "\n"
-		string += "Good Luck!"
+		string += "CIVILIZATION" + "\n\n\n\n"
+		string += "Press Space to Continue" + "\n\n"
+		string += "Press 'h', at any time, for help"
 		self.canvas.create_text(self.canvasWidth/2,self.canvasHeight/2,
 			text = string, font = "Helvtica 24", anchor = CENTER)
 
-	def drawHelp(self):
+	def drawHelp(self): #help screen
 		string = ""
 		string += "The goal of the game is to eliminate all enemy units.\n\n"
 		string += "Blue moves first.\n\n"
-		string += "The rectangle in the upper left corner indicates whose"
+		string += "The square in the upper left corner indicates whose"
 		string += " turn it is.\n\n"
 		string += "Controls:\n"
 		string += "Click on a unit to select it.\n"
@@ -709,7 +715,7 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		string += " moves,\n\tyou will battle.\n"
 		string += "Use the arrow keys to scroll around the board.\n"
 		string += "Press Space to end your turn.\n"
-		string += "Press 's' with a Settler selected to found a City.\n"
+		string += "Press 'c' with a Settler selected to found a City.\n"
 		string += "Press 'w' with a City selected to build a warrior and 's' "
 		string += "to build a Settler, if you have\n\tenough production"
 		string += " shields.\n"
@@ -717,12 +723,14 @@ class PartialGame(Animation): #basis of the "board" and how things will move
 		string += "\nKey:\n"
 		string += "Wa : Warrior\n"
 		string += "Se : Settler\n"
-		string += "Ci : City\n\n"
+		string += "Ci : City\n"
 		string += "\nMechaics:\n"
 		string += "You can fight with warriors, create cities with settlers, "
 		string += "and create units with cities.\n"
-		string += "All cities gain +2 production shields per turn.\n"
+		string += "All cities gain +2 production shields at the beggining of "
+		string += "each turn.\n"
 		string += "It costs 5 shields for a warrior and 8 for a settler.\n"
+		string += "Unit (warrior) health is displayed in the console window.\n"
 		string += "\nDebug:\n"
 		string += "Press 'd' to toggle tile indicies.\n"
 		string += "Press 'u' to toggle units/cities.\n\n"
