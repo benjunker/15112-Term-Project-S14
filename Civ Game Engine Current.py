@@ -7,6 +7,8 @@
 #No win condition, as of yet
 #crashes if they both die --> fixed!
 #rewrite damage calculation
+#crashes if you click enemy unit outside move range
+#add creating archers to cities
 
 from Tkinter import *
 import random
@@ -189,7 +191,7 @@ class Military(Unit):
 		successNumber = Unit.effectiveDict[success] #quantifies success
 		return successNumber
 
-	def battle(self,other): #battle enginge, for military units
+	def battle(self,other,moveDict): #battle enginge, for military units
 		if isinstance(other,Military):
 			selfSuccess = self.battleSuccess()
 			otherSuccess = other.battleSuccess()
@@ -199,12 +201,13 @@ class Military(Unit):
 			other.checkLife()
 			self.battled = True
 			self.moves = 0
-			return (damageDealt,damageRetaliated,self.health,other.health)
+			return (damageDealt,damageRetaliated,self.health,other.health,
+				self.battled)
 		elif isinstance(other,Support):
 			other.lose(self)
 			self.battled = True
 			self.moves = 0
-			return 0,0,None,None
+			return 0,0,None,None,self.battled
 		#health is temporarily displayed in console window
 		#with the attacker's health first
 
@@ -234,10 +237,16 @@ class Military(Unit):
 		#attacker's health first
 
 class Land(Military):
+	def battle(self,other,moveDict):
+		if (other.xPos,other.yPos) in moveDict:
+			if moveDict[(other.xPos,other.yPos)] == 1:
+				return super(Land,self).battle(other,moveDict)
+			else: return None,None,None,None,False
+		else: return None,None,None,None,False
+
 	def retaliate(self,other,selfSuccess,otherSuccess):
 		if isinstance(other,Land):
-			super(Land,self).retaliate(other,selfSuccess,otherSuccess)
-			return self.damage
+			return super(Land,self).retaliate(other,selfSuccess,otherSuccess)
 		else:
 			self.damage = 0
 			return 0
@@ -264,20 +273,51 @@ class Warrior(Land):
 		#return ""
 
 class Range(Military):
-	def battle(self,other): #fix so ranged attacks work
-		if isinstance(other,Military):
-			super(Range,self).battle(other)
-			return self.damage,other.damage,self.health,other.health
-		elif isinstance(other,Support):
-			super(Range,self).battle(other)
-			return 0,0,None,None
+	def __init__(self,atk,df,team,moves,xPos,yPos,sight,health,ranged=2):
+		self.range = ranged
+		super(Range,self).__init__(atk,df,team,moves,xPos,yPos,sight,health)
+
+	def findBoundingBoxAttackTiles(self,indexA,indexB,n):
+		boundingBoxSet = set()
+		for xPos in xrange(max(indexA-2*n,0),indexA+2*n+1):
+			for yPos in xrange(max(indexB-n,0),indexB+n+1):
+				if xPos%2 == yPos%2:
+					boundingBoxSet.add((xPos,yPos))
+		return boundingBoxSet
+
+	def findDiamondAttackTilesGivenSet(self,indexA,indexB,n,boundingBoxSet):
+		legalMoveSet = set()
+		for move in boundingBoxSet:
+			(moveX,moveY) = move
+			deltaX = abs(moveX-indexA)
+			deltaY = abs(moveY-indexB)
+			deltaTotal = (deltaX+deltaY)/2
+			deltaMax = n
+			if deltaMax>=deltaTotal:
+				legalMoveSet.add(move)
+		return legalMoveSet
+		#rectangle plus diamond makes hexagon
+
+	def battle(self,other,moveDict): #fix so ranged attacks work
+		indexA,indexB,n = self.xPos,self.yPos,self.range
+		self.attackSet = self.findDiamondAttackTilesGivenSet(indexA,indexB,
+			n,self.findBoundingBoxAttackTiles(indexA,indexB,n))
+		if (other.xPos,other.yPos) in self.attackSet:
+			return super(Range,self).battle(other,moveDict)
+		else:
+			return None,None,None,None,False
 
 class Archer(Range):
 	atk = df = moves = sight = 2 #arbitrary
 
-	def __init__(self,team=None,xPos=None,yPos=None,health=100):
-		atk,df,moves,sight = Warrior.atk,Warrior.df,Warrior.moves,Warrior.sight
-		super(Archer,self).__init__(atk,df,team,moves,xPos,yPos,sight,health)
+	def __init__(self,team=None,xPos=None,yPos=None,health=100,ranged=None):
+		atk,df,moves,sight=Archer.atk,Archer.df,Archer.moves,Archer.sight
+		if not ranged:
+			super(Archer,self).__init__(atk,df,team,moves,xPos,yPos,sight,
+				health)
+		else:
+			super(Archer,self).__init__(atk,df,team,moves,xPos,yPos,sight,
+				health,ranged)
 
 class Support(Unit):
 	def lose(self,other): #always lose battles to military
@@ -299,13 +339,48 @@ class Settler(Support):
 
 class Tile(object): #tiles that make up the board
 	tileSet = set() #list of all tiles to iterate through
-	def __init__(self,colPos,rowPos,r,adj60,left,top,adj30): #initializes each tile
+
+	tileDict = {}
+
+	landDict = {}
+
+	waterDict = {}
+
+	terrainDict = {}
+
+	def __init__(self,colPos,rowPos,r,adj60,left,top,adj30):#inits tiles
 		cx = left + adj60 + colPos * adj60
 		cy = top + r if rowPos%2 == 0 else top+2*r+adj30
 		cy += rowPos/2*2*(r+adj30)
 		self.cx,self.cy,self.r = cx,cy,r
 		self.indexA,self.indexB = colPos,rowPos
+		self.terrain = self.seedRandomTerrain()
+		if self.terrain == "land":
+			Tile.landDict[(self.indexA,self.indexB)] = self
+		elif self.terrain == "water":
+			Tile.waterDict[(self.indexA,self.indexB)] = self
+		Tile.terrainDict[(self.indexA,self.indexB)] = self.terrain
 		Tile.tileSet.add(self)
+		Tile.tileDict[(self.indexA,self.indexB)] = self
+
+	def seedRandomTerrain(self):
+		randomSeed = random.randint(0,24)
+		#if randomSeed<=0: return "water"
+		if 0<randomSeed<=1: return "land"
+		else: return None
+		#surroundingTiles = set([(indexA+2,indexB),(indexA-2,indexB),
+		#(indexA+1,indexB+1),(indexA-1,indexB-1),
+		#(indexA-1,indexB+1),(indexA+1,indexB-1)])
+		#surroundingArea = []
+		#for tileIndex in surroundingTiles:
+		#	if tileIndex in Tile.terrainDict:
+		#		surroundingArea.append(Tile.terrainDict[tileIndex])
+		#weight = (.5+(surroundingArea.count("land")-
+		#	surroundingArea.count("water")/float(len(surroundingArea)))*.97*.5 
+		#	if len(surroundingArea)>0 else .4)
+		#tileDistrNo = random.triangular(0,1,weight)
+		#if tileDistrNo<.5: return "water"
+		#else: return "land"
 
 class City(Interactable): #Cities make units
 	cityDict = {}
@@ -432,14 +507,23 @@ class Civilization(Animation): #basis of the "board" and how things will move
 					self.deselectCurrentlySelectedUnit()
 				elif unpackedTile.team != self.player: #interact with other
 					if (not self.selectedUnit.battled and #unit
-						self.selectedUnit.moves > 0 and
-						self.moveDict[(unpackedTile.xPos,unpackedTile.yPos)]==1
-						):
-						(damageDealt,damageRetaliated,selfHealth,otherHealth
-							) = self.selectedUnit.battle(unpackedTile)
-						self.updateStatusListFromBattle(damageDealt,
-							damageRetaliated,selfHealth,otherHealth,
-							unpackedTile)
+						self.selectedUnit.moves > 0):
+						(damageDealt,damageRetaliated,selfHealth,otherHealth,
+							battled) = self.selectedUnit.battle(unpackedTile,
+							self.moveDict)
+						if battled:
+							self.updateStatusListFromBattle(damageDealt,
+								damageRetaliated,selfHealth,otherHealth,
+								unpackedTile)
+						else:
+							otherColor = ("Blue" if unpackedTile.team == 
+								"blue" else "Red")
+							otherTypeStr = str(type(unpackedTile))
+							otherUnitString = (otherTypeStr
+								[otherTypeStr.find(".")+1:-2])
+							addend = "You cannot attack that %s %s." % (
+								otherColor,otherUnitString)
+							self.statusTextList.append(addend)
 						self.deselectCurrentlySelectedUnit()
 			elif (indexA,indexB) in self.moveDict: #move unit
 				self.selectedUnit.move(indexA,indexB,self.moveDict)
@@ -547,6 +631,10 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			if isinstance(self.selectedUnit,Settler):
 				self.selectedUnit.settle()
 				self.deselectCurrentlySelectedUnit()
+		elif event.keysym == "Up":
+			self.countAdj += 1
+		elif event.keysym == "Down":
+			self.countAdj -= 1
 		#print self.indexA,self.indexB
 
 	def switchPlayer(self):
@@ -562,17 +650,25 @@ class Civilization(Animation): #basis of the "board" and how things will move
 				city.produceShields()
 
 	def drawBoard(self): #for each tile object, draws a hexagon
-		adj60,adj30,left,top,r = self.adj60,self.adj30,self.left,self.top,self.r
+		adj60,adj30,left,top,r =self.adj60,self.adj30,self.left,self.top,self.r
 		rows,cols = self.rows-1,self.cols-1
 		self.leftEdge = left+self.adjX
 		self.rightEdge = left+2*adj60+self.adjX+(self.cols-1)*adj60
 		self.topEdge = top+self.adjY
 		self.bottomEdge = top + r if rows%2 == 0 else top+2*r+adj30+self.adjY
 		self.bottomEdge += rows/2*2*(r+adj30) + r
+		self.canvas.create_rectangle(self.left,self.top,self.right,self.bottom,
+			fill = "black")
 		for tile in Tile.tileSet:
+			color = "#d2d2d2"
+			color = "purple"
 			cx,cy,r = tile.cx,tile.cy,tile.r
 			cx += self.adjX
 			cy += self.adjY
+			if tile.terrain == "land":
+				color = "#F4A460"
+			elif tile.terrain == "water":
+				color = "#3be6ff"
 			if ((self.right+2*self.adj60>cx>self.left-2*adj60) and
 				(self.bottom+2*r>cy>self.top-2*r)):
 				self.canvas.create_polygon(cx,          cy-r,
@@ -581,15 +677,15 @@ class Civilization(Animation): #basis of the "board" and how things will move
 										   cx,          cy+r,
 										   cx-adj60,    cy+adj30,
 										   cx-adj60,    cy-adj30,
-										   fill = "#d2d2d2", outline = "black",
+										   fill = color, outline = "black",
 										   width = r/50)#line width heuristic
 				if self.coords:self.canvas.create_text(cx,cy,text="%d,%d"%(
 					tile.indexA,tile.indexB),font="Helvetica %d" % 
 					(int(self.r/1.5))) #superimpose numbers
-		self.canvas.create_rectangle(self.left,self.top,self.right,self.bottom)
+		#self.canvas.create_rectangle(self.left,self.top,self.right,self.bottom)
 		#bounding rectangle to show what the board actually is
 
-	def initBoard(self,cx=400,cy=250,width=700,height=400,r=20): #creates tiles
+	def initBoard(self,cx=400,cy=250,width=700,height=400,r=20,random=True): #creates tiles
 		cy = cy if cy != 250 else self.canvasHeight/2
 		height = height if height != 400 else self.canvasHeight-(cx-width/2)*2
 		left,right,top,bottom = cx-width/2,cx+width/2,cy-height/2,cy+height/2
@@ -606,6 +702,115 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		for colPos2 in xrange(1,self.cols,2): #easier to iterate every other row, separately
 			for rowPos2 in xrange(1,self.rows,2):
 				Tile(colPos2,rowPos2,r,adj60,left,top,adj30)
+		if random:
+			self.count = 0
+			landSet = set()
+			for tile in Tile.tileSet:
+				if tile.terrain == "land":
+					landSet.add(tile)
+				#self.fillBoard(tile)
+			#self.fillLand()
+			self.growBoard(landSet)
+			self.fillWater()
+
+	def growBoard(self,landSet):
+		for landTile in landSet:
+			indexA,indexB = landTile.indexA,landTile.indexB
+			n = 5
+			possibleLandDict = {}
+			possibleLandSet = set()
+			for n in xrange(n,0,-1):
+				tempLandDict,tempLandSet = self.findPosLandNMovesAway(indexA,
+					indexB,n)
+				possibleLandSet = possibleLandSet.union(tempLandSet)
+				for index in tempLandDict:
+					possibleLandDict[index] = n
+			for tileIndex in possibleLandSet:
+				tile = Tile.tileDict[tileIndex]
+				weight = (1 - .25*possibleLandDict[tileIndex])
+				probNo = random.uniform(0,1)
+				if probNo <= weight:
+					tile.terrain = "land"
+					Tile.terrainDict[(indexA,indexB)] = tile.terrain
+					Tile.landDict[(indexA,indexB)] = tile
+
+	def fillWater(self):
+		for tile in Tile.tileSet:
+			if tile.terrain == None:
+				indexA,indexB = tile.indexA,tile.indexB
+				tile.terrain = "water"
+				Tile.terrainDict[(indexA,indexB)] = tile.terrain
+				Tile.waterDict[(indexA,indexB)] = tile
+
+	def findPosLandNMovesAway(self,indexA,indexB,n):
+		boundingBoxTiles = self.findBoundingBoxMoves(indexA,indexB,n)
+		diamondTilesGivenSet = self.findDiamondMovesGivenSet(indexA,indexB,n,
+			boundingBoxTiles)
+		tilesNMovesAway = diamondTilesGivenSet
+		landDict,landSet = {},set()
+		for move in tilesNMovesAway:
+			landDict[move] = n
+			landSet.add(move)
+		return landDict,landSet
+
+	def findPossibleLandTilesBox(self,indexA,indexB,n):
+		boundingBoxSet = set()
+		for xPos in xrange(max(indexA-2*n,0),min(indexA+2*n,self.cols-1)+1):
+			for yPos in xrange(max(indexB-n,0),min(indexB+n,self.rows-1)+1):
+				if xPos%2 == yPos%2:
+					boundingBoxSet.add((xPos,yPos))
+		return boundingBoxSet
+
+	def diamondPossibleLandTiles(self,indexA,indexB,n,boundingBoxSet):
+		possibleLandSet = set()
+		for indicie in boundingBoxSet:
+			(moveX,moveY) = move
+			deltaX = abs(moveX-indexA)
+			deltaY = abs(moveY-indexB)
+			deltaTotal = (deltaX+deltaY)/2
+			deltaMax = n
+			if deltaMax>=deltaTotal:
+				possibleLandSet.add(move)
+		return possibleLandSet
+		#rectangle plus diamond makes hexagon
+
+	def fillBoard(self,tile):
+		indexA,indexB = tile.indexA,tile.indexB
+		surroundingTiles = set([(indexA+2,indexB),(indexA-2,indexB),
+		(indexA+1,indexB+1),(indexA-1,indexB-1),
+		(indexA-1,indexB+1),(indexA+1,indexB-1)])
+		surroundingArea = []
+		for tileIndex in surroundingTiles:
+			if tileIndex in Tile.terrainDict:
+				surroundingArea.append(Tile.terrainDict[tileIndex])
+		if surroundingArea.count(None) == 6:
+			tile.terrain = "water"
+			Tile.terrainDict[(indexA,indexB)] = tile.terrain
+			Tile.waterDict[(indexA,indexB)] = tile
+		elif surroundingArea.count("land") <= 1:
+			probNo = random.uniform(0,1)
+			if probNo >= 0.33:
+				tile.terrain = "water"
+				Tile.terrainDict[(indexA,indexB)] = tile.terrain
+				Tile.waterDict[(indexA,indexB)] = tile
+			else:
+				tile.terrain = "land"
+				Tile.terrainDict[(indexA,indexB)] = tile.terrain
+				Tile.landDict[(indexA,indexB)] = tile
+
+	def fillLand(self):
+		for tile in Tile.tileSet:
+			if tile.terrain == None:
+				indexA,indexB = tile.indexA,tile.indexB
+				tile.terrain = "land"
+				Tile.terrainDict[(indexA,indexB)] = tile.terrain
+				Tile.landDict[(indexA,indexB)] = tile
+		#weight = (.5+(surroundingArea.count("land")-
+		#	surroundingArea.count("water")/float(len(surroundingArea)))*.97*.5 
+		#	if len(surroundingArea)>0 else .4)
+		#tileDistrNo = random.triangular(0,1,weight)
+		#if tileDistrNo<.5: return "water"
+		#else: return "land"
 
 	def drawPosition(self,indexA,indexB): #draws dot: hypothetical unit
 		if (indexA%2 != indexB%2): indexA += 1 #NOT self.indexA
@@ -737,7 +942,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 	def drawAroundBoard(self): #the beige around the board
 		color="#fff7d2"
 		outline = color
-		width = 2
+		width = 0
 		self.canvas.create_rectangle(0,0,self.left,self.canvasHeight,
 			fill=color,width=width,outline=outline)
 		self.canvas.create_rectangle(self.left,0,self.right,self.top,
@@ -756,10 +961,11 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		self.canvas.create_rectangle(self.right+50,self.canvasHeight/3,
 			self.canvasWidth-50,self.canvasHeight-50,fill="white")
 		self.statusText = ""
-		count = -1
+		count = -1 + self.countAdj
 		for event in reversed(self.statusTextList):
 			count += 1
-			if self.canvasHeight-70-count*35>self.canvasHeight/3:
+			if (self.canvasHeight-50>self.canvasHeight-70-count*35>
+				self.canvasHeight/3):
 				self.canvas.create_text(self.right+51,
 					self.canvasHeight-70-count*35,
 					text = event, anchor = W,
@@ -947,7 +1153,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		self.coords = False
 		self.adjX = 0
 		self.adjY = 0
-		self.showUnits = True
+		self.showUnits = False
 		self.selectedUnit = None
 		self.player = "blue"
 		self.splashScreen = True
@@ -963,6 +1169,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		self.lastB = 0
 		#self.statusText = ""
 		self.statusTextList = []
+		self.countAdj = 0
 
 	def redrawAll(self): #redraws all
 		if self.splashScreen:
@@ -983,7 +1190,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 				self.drawStatusBox()
 		#self.drawPosition(self.indexA,self.indexB)
 
-Civilization().run(50,50)
+Civilization().run(30,60)
 
 def testAll():
 	pass
