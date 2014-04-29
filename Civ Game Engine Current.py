@@ -9,6 +9,7 @@
 #rewrite damage calculation
 #crashes if you click enemy unit outside move range
 #add creating archers to cities
+#add range to archers hover menus
 
 from Tkinter import *
 import random
@@ -27,7 +28,7 @@ class Animation(object): #From Kosbie email;expanded sligtly from stock code
 	
 	#removed many of the comments
 	def run(self,rows=10,cols=20,width=1280,height=720):#new args
-		root = Tk()
+		root = Tk(className=" Civilization ")
 		self.canvasWidth,self.canvasHeight = width,height
 		self.rows,self.cols = rows,cols
 		self.canvas = Canvas(root, width=width, height=height)
@@ -354,7 +355,7 @@ class Tile(object): #tiles that make up the board
 		cy += rowPos/2*2*(r+adj30)
 		self.cx,self.cy,self.r = cx,cy,r
 		self.indexA,self.indexB = colPos,rowPos
-		self.terrain = self.seedRandomTerrain()
+		self.terrain = self.seedRandomTerrain(self.indexA,self.indexB)
 		if self.terrain == "land":
 			Tile.landDict[(self.indexA,self.indexB)] = self
 		elif self.terrain == "water":
@@ -363,9 +364,11 @@ class Tile(object): #tiles that make up the board
 		Tile.tileSet.add(self)
 		Tile.tileDict[(self.indexA,self.indexB)] = self
 
-	def seedRandomTerrain(self):
+	def seedRandomTerrain(self,indexA,indexB):
 		randomSeed = random.randint(0,24)
 		#if randomSeed<=0: return "water"
+		if (indexA,indexB) in set([(1,1),(2,2),(58,28),(57,27)]):
+			return "land"
 		if 0<randomSeed<=1: return "land"
 		else: return None
 		#surroundingTiles = set([(indexA+2,indexB),(indexA-2,indexB),
@@ -435,6 +438,7 @@ class City(Interactable): #Cities make units
 class Civilization(Animation): #basis of the "board" and how things will move
 
 	def mouseMotion(self,event):
+		self.image = self.start
 		ctrl  = ((event.state & 0x0004) != 0)
 		shift = ((event.state & 0x0001) != 0)
 		capsLock = ((event.state & 0x0002) != 0)
@@ -448,13 +452,42 @@ class Civilization(Animation): #basis of the "board" and how things will move
 				self.baseTime = time.time()
 			self.motionIndexA = indexA
 			self.motionIndexB = indexB
+		elif self.splashScreen and not(self.help):
+			if self.mouseRelease and not self.mousePress:
+				if 485<=event.x<=790:
+					if 255<= event.y<=340:
+						self.image = self.playHover
+					elif 420<=event.y<=505:
+						self.image = self.helpHover
+			elif not self.mouseRelease and self.mousePress:
+				if 485<=event.x<=790:
+					if 255<= event.y<=340:
+						self.image = self.playClick
+					elif 420<=event.y<=505:
+						self.image = self.helpClick
 		self.mseX = event.x
 		self.mseY = event.y
 
+	def mouseReleased(self,event):
+		self.mouseRelease = True
+		self.mousePress = False
+		if self.image == self.playClick:
+			self.image = self.playHover
+			self.splashScreen = False
+		elif self.image == self.helpClick:
+			self.image = self.helpHover
+			self.help = True
+
 	def mousePressed(self,event):
+		if self.image == self.playHover: self.image = self.playClick
+		elif self.image == self.helpHover: self.image = self.helpClick
+		self.mousePress = True
+		self.mouseRelease = False
 		if not(self.splashScreen) and not(self.help):
 			indexA,indexB = self.calcMousePosition(event)
 			self.unitAction(indexA,indexB)
+		if event.y<0: #to close better
+			self.help = True
 		#if not self.selected:
 		#	if (self.indexA == indexA) and (self.indexB == indexB):
 		#		self.selected = True
@@ -581,7 +614,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		self.selectedUnit = None
 
 	def keyPressed(self,event): #mainly for testing; as moving uses the mouse in game
-		keyAdj = 20
+		#keyAdj = 20
 		#if not(self.splashScreen) and not(self.help):
 		#	if event.keysym == "Up":
 		#		if not self.bottomEdge-keyAdj<=self.bottom:
@@ -611,12 +644,12 @@ class Civilization(Animation): #basis of the "board" and how things will move
 														   #numbers over tiles
 		elif event.keysym == "u": self.showUnits = not(self.showUnits)
 		elif event.keysym == "space":
-			if self.splashScreen:
-				self.splashScreen = not(self.splashScreen)
-			else:
-				self.switchPlayer()
-				self.deselectCurrentlySelectedUnit()
-				self.reset() #happens at the beginning of the turn
+			#if self.splashScreen:
+			#	self.splashScreen = not(self.splashScreen)
+			# else:
+			self.switchPlayer()
+			self.deselectCurrentlySelectedUnit()
+			self.reset() #happens at the beginning of the turn
 		elif event.keysym == "h":
 			self.help = not(self.help)
 		elif event.keysym == "s":
@@ -635,6 +668,8 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			self.countAdj += 1
 		elif event.keysym == "Down":
 			self.countAdj -= 1
+		elif event.keysym == "r":
+			self.init()
 		#print self.indexA,self.indexB
 
 	def switchPlayer(self):
@@ -685,7 +720,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		#self.canvas.create_rectangle(self.left,self.top,self.right,self.bottom)
 		#bounding rectangle to show what the board actually is
 
-	def initBoard(self,cx=400,cy=250,width=700,height=400,r=20,random=True): #creates tiles
+	def initBoard(self,cx=400,cy=250,width=700,height=400,r=15,random=True): #creates tiles
 		cy = cy if cy != 250 else self.canvasHeight/2
 		height = height if height != 400 else self.canvasHeight-(cx-width/2)*2
 		left,right,top,bottom = cx-width/2,cx+width/2,cy-height/2,cy+height/2
@@ -703,7 +738,6 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			for rowPos2 in xrange(1,self.rows,2):
 				Tile(colPos2,rowPos2,r,adj60,left,top,adj30)
 		if random:
-			self.count = 0
 			landSet = set()
 			for tile in Tile.tileSet:
 				if tile.terrain == "land":
@@ -712,27 +746,52 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			#self.fillLand()
 			self.growBoard(landSet)
 			self.fillWater()
+			#def growBoard(self,landSet): #weird broken code. rewrote it
+			#	for landTile in landSet:
+			#		indexA,indexB = landTile.indexA,landTile.indexB
+			#		if (indexA,indexB) == (1,1):
+			#			n = 5
+			#			possibleLandDict = {}
+			#			possibleLandSet = set()
+			#			for n in xrange(n,0,-1):
+			#				tempLandDict,tempLandSet = self.findPosLandNMovesAway(indexA,
+			#					indexB,n)
+			#				possibleLandSet = possibleLandSet.union(tempLandSet)
+			#				for index in tempLandDict:
+			#					possibleLandDict[index] = n
+			#			for tileIndex in possibleLandSet:
+			#				newTile = Tile.tileDict[tileIndex]
+			#				weight = (1 - .25*(possibleLandDict[tileIndex]-1))
+			#				probNo = random.uniform(0,1)
+			#				if newTile.terrain == None:
+			#					if probNo <= weight:
+			#						newTile.terrain = "land"
+			#						Tile.terrainDict[(indexA,indexB)] = newTile.terrain
+			#						Tile.landDict[(indexA,indexB)] = newTile
+			#					else:
+			#						newTile.terrain = "water"
+			#						Tile.terrainDict[(indexA,indexB)] = newTile.terrain
+			#						Tile.waterDict[(indexA,indexB)] = newTile
 
 	def growBoard(self,landSet):
 		for landTile in landSet:
 			indexA,indexB = landTile.indexA,landTile.indexB
-			n = 5
-			possibleLandDict = {}
-			possibleLandSet = set()
-			for n in xrange(n,0,-1):
-				tempLandDict,tempLandSet = self.findPosLandNMovesAway(indexA,
-					indexB,n)
-				possibleLandSet = possibleLandSet.union(tempLandSet)
-				for index in tempLandDict:
-					possibleLandDict[index] = n
-			for tileIndex in possibleLandSet:
+			distanceAway = 2
+			possibleTileSet = set()
+			possibleTileDict = {}
+			for n in xrange(distanceAway,0,-1):
+				tempDict,tempSet = self.findPosLandNMovesAway(indexA,indexB,n)
+				for key in tempDict:
+					possibleTileDict[key] = tempDict[key]
+				possibleTileSet = possibleTileSet.union(tempSet)
+			for tileIndex in possibleTileSet:
 				tile = Tile.tileDict[tileIndex]
-				weight = (1 - .25*possibleLandDict[tileIndex])
-				probNo = random.uniform(0,1)
-				if probNo <= weight:
-					tile.terrain = "land"
-					Tile.terrainDict[(indexA,indexB)] = tile.terrain
-					Tile.landDict[(indexA,indexB)] = tile
+				if tile.terrain == None:
+					weight = (1 - .4*(possibleTileDict[tileIndex]-1))#Make the .4 (weight) closer to 1 for smaller land masses
+					if random.uniform(0,1) <= weight:
+						tile.terrain = "land"
+						Tile.terrainDict[tileIndex] = "land"
+						Tile.landDict[tileIndex] = tile
 
 	def fillWater(self):
 		for tile in Tile.tileSet:
@@ -829,11 +888,10 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		#the dot, which represents a unit, has an arbitrary radius of 5
 
 	def initUnits(self): #arbitrary
-		Settler("red",0,0)
-		Settler("blue",6,6)
-		Warrior("red",1,1)
-		Warrior("blue",5,5)
-		Archer("blue",4,4)
+		Settler("red",self.cols-2,self.rows-2)
+		Settler("blue",1,1)
+		Warrior("red",self.cols-3,self.rows-3)
+		Warrior("blue",2,2)
 
 	def drawUnits(self):
 		left,adj60,top,r,adj30=self.left,self.adj60,self.top,self.r,self.adj30
@@ -892,7 +950,19 @@ class Civilization(Animation): #basis of the "board" and how things will move
 				color = "pink"
 				if (cx > self.right or cx < self.left or cy > self.bottom or 
 					cy < self.top): continue
-				self.canvas.create_oval(cx-5,cy-5,cx+5,cy+5,fill = color)
+				r = self.r
+				if Tile.terrainDict[(indexA,indexB)] == "water":
+					color = "#b4dce9"
+				else:
+					color = "#fbc0a7"
+				self.canvas.create_polygon(cx,          cy-r,
+										   cx+adj60,    cy-adj30,
+										   cx+adj60,    cy+adj30,
+										   cx,          cy+r,
+										   cx-adj60,    cy+adj30,
+										   cx-adj60,    cy-adj30,
+										   fill = color, outline = "black",
+										   width = r/50)#line width heuristic
 		else:
 			self.moveSet = self.moveDict = None
 
@@ -1097,12 +1167,8 @@ class Civilization(Animation): #basis of the "board" and how things will move
 				self.adjY += self.bottom-self.bottomEdge #stop
 
 	def drawSplashScreen(self): #starting screen
-		string = ""
-		string += "CIVILIZATION" + "\n\n\n\n"
-		string += "Press Space to Continue" + "\n\n"
-		string += "Press 'h', at any time, for help"
-		self.canvas.create_text(self.canvasWidth/2,self.canvasHeight/2,
-			text = string, font = "Helvtica 24", anchor = CENTER)
+		image = self.image
+		self.canvas.create_image(0,0,image=image,anchor=NW)
 
 	def drawHelp(self): #help screen
 		string = ""
@@ -1141,6 +1207,14 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			text = string, font = "Helvtica 12", anchor = NW)
 
 	def init(self): #initializes the animation
+		Tile.tileSet = set()
+		Unit.unitDict = {}
+		Unit.unitSet = set()
+		Tile.tileSet = set()
+		Tile.tileDict = {}
+		Tile.landDict = {}
+		Tile.waterDict = {}
+		Tile.terrainDict = {}
 		#add inital production options in init
 		#add consequent production options in science engine
 		self.initBoard()
@@ -1170,6 +1244,14 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		#self.statusText = ""
 		self.statusTextList = []
 		self.countAdj = 0
+		self.start = PhotoImage(file="start.gif")
+		self.helpHover = PhotoImage(file="help-hover.gif")
+		self.playHover = PhotoImage(file="play-hover.gif")
+		self.helpClick = PhotoImage(file="help-click.gif")
+		self.playClick = PhotoImage(file="play-click.gif")
+		self.image = self.start
+		self.mousePress = False
+		self.mouseRelease = True
 
 	def redrawAll(self): #redraws all
 		if self.splashScreen:
