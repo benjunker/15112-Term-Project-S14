@@ -190,12 +190,14 @@ class Marine(Unit):
 			print "Tried to load a non-unit!"
 			return
 		if not self.atCapacity:
-			Unit.unitSet.remove(other)
-			Unit.unitDict[(other.xPos,other.yPos)].remove(other)
-			other.xPos,other.yPos = None,None
-			self.unitSet.add(other)
-			self.currentCapacity = len(self.unitSet)
-			self.capacityTest()
+			if other.moves>0:
+				other.moves = 0
+				Unit.unitSet.remove(other)
+				Unit.unitDict[(other.xPos,other.yPos)].remove(other)
+				other.xPos,other.yPos = None,None
+				self.unitSet.add(other)
+				self.currentCapacity = len(self.unitSet)
+				self.capacityTest()
 
 	def capacityTest(self):
 		if self.currentCapacity > 0: self.loaded = True
@@ -207,47 +209,66 @@ class Marine(Unit):
 		posAdj = [(+1,-1),(+2,+0),(+1,+1),(-1,+1),(-2,+0),(-1,-1)]
 		n=1
 		basePos = (self.xPos,self.yPos)
-		while self.loaded and n<5:
-		#	newPosAdj = []
-		#	for adj in posAdj:
-		#		addend = []
-		#		for element in adj:
-		#			addend.append(n*element)
-		#		addend = tuple(addend)
-		#		newPosAdj.append(addend)
-			#posPlace = []
-			boundingBox = self.findBoundingBoxAttackTiles(self.xPos,
-				self.yPos,n)
-			newPosAdj = self.findDiamondAttackTilesGivenSet(self.xPos,
-				self.yPos,n,boundingBox)
-			#for adj in newPosAdj:
-			#	addend = (basePos[0]+adj[0],basePos[1]+adj[1])
-			#	if addend[0]>=0 and addend[1]>=0:
-			#		posPlace.append(addend)
-			#print posPlace
-			count = -1
-			for place in newPosAdj:
-				if len(self.unitSet) <= 0: continue
-				count += 1
-				#print " "*count + str(place) + "1"
-				if place in Tile.terrainDict:
-				#	print " "*count + str(place) + "2"
-					if Tile.terrainDict[place] == "land":
-				#		print " "*count + str(place) + "3"
-						if len(self.unitSet)> 0:
-				#			print " "*count + str(place) + "4"
-							unitList = list(self.unitSet)
-							unit = unitList.pop()
-							unit.xPos = place[0]
-							unit.yPos = place[1]
-							Unit.unitSet.add(unit)
-							try: Unit.unitDict[(unit.xPos,unit.yPos)].add(unit)
-							except: Unit.unitDict[(unit.xPos,
-								unit.yPos)] = set([unit])
-							#unit.reset(x)
-							self.unitSet = set(unitList)
-			n += 1
-			self.capacityTest()
+		relPosAdj = [(basePos[0]+adj[0],basePos[1]+adj[1]) for adj in posAdj]
+		cont = False
+		for pos in relPosAdj:
+			if pos[0] >= 0 and pos[1] >= 0:
+				if Tile.terrainDict[pos] == "land":
+					cont = True
+		if cont:
+			while self.loaded and n<5:
+			#	newPosAdj = []
+			#	for adj in posAdj:
+			#		addend = []
+			#		for element in adj:
+			#			addend.append(n*element)
+			#		addend = tuple(addend)
+			#		newPosAdj.append(addend)
+				#posPlace = []
+				boundingBox = self.findBoundingBoxAttackTiles(self.xPos,
+					self.yPos,n)
+				newPosAdj = self.findDiamondAttackTilesGivenSet(self.xPos,
+					self.yPos,n,boundingBox)
+				#for adj in newPosAdj:
+				#	addend = (basePos[0]+adj[0],basePos[1]+adj[1])
+				#	if addend[0]>=0 and addend[1]>=0:
+				#		posPlace.append(addend)
+				#print posPlace
+				#count = -1
+				for place in newPosAdj:
+					if len(self.unitSet) <= 0: continue
+					#count += 1
+					#print " "*count + str(place) + "1"
+					if place in Tile.terrainDict:
+					#	print " "*count + str(place) + "2"
+						if Tile.terrainDict[place] == "land":
+					#		print " "*count + str(place) + "3"
+							if len(self.unitSet)> 0:
+								if place not in Unit.unitDict:
+					#			print " "*count + str(place) + "4"
+									unitList = list(self.unitSet)
+									unit = unitList.pop()
+									unit.xPos = place[0]
+									unit.yPos = place[1]
+									Unit.unitSet.add(unit)
+									try: Unit.unitDict[(unit.xPos,unit.yPos)].add(unit)
+									except: Unit.unitDict[(unit.xPos,
+										unit.yPos)] = set([unit])
+								elif place in Unit.unitDict:
+									if not Unit.unitDict[place]:
+										unitList = list(self.unitSet)
+										unit = unitList.pop()
+										unit.xPos = place[0]
+										unit.yPos = place[1]
+										Unit.unitSet.add(unit)
+										try: Unit.unitDict[(unit.xPos,unit.yPos)].add(unit)
+										except: Unit.unitDict[(unit.xPos,
+											unit.yPos)] = set([unit])
+								#unit.reset(x)
+								self.unitSet = set(unitList)
+				n += 1
+		self.currentCapacity = len(self.unitSet)
+		self.capacityTest()
 
 	def findBoundingBoxAttackTiles(self,indexA,indexB,n):
 		boundingBoxSet = set()
@@ -595,6 +616,9 @@ class City(Interactable): #Cities make units
 			City.cityDict[(self.xPos,self.yPos)].remove(self)
 			City.citySet.remove(self)
 
+	def reset(self):
+		self.health = int(self.health*1.05) if self.health*1.05<200 else 200
+
 class Civilization(Animation): #basis of the "board" and how things will move
 
 	def mouseMotion(self,event):
@@ -884,6 +908,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		for city in City.citySet:
 			if city.team == self.player:
 				city.produceShields()
+				city.reset()
 
 	def drawBoard(self): #for each tile object, draws a hexagon
 		adj60,adj30,left,top,r =self.adj60,self.adj30,self.left,self.top,self.r
@@ -922,7 +947,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		#self.canvas.create_rectangle(self.left,self.top,self.right,self.bottom)
 		#bounding rectangle to show what the board actually is
 
-	def initBoard(self,cx=400,cy=250,width=700,height=400,r=20,random=True): #creates tiles
+	def initBoard(self,cx=400,cy=250,width=700,height=400,r=22,random=True): #creates tiles
 		cy = cy if cy != 250 else self.canvasHeight/2
 		height = height if height != 400 else self.canvasHeight-(cx-width/2)*2
 		left,right,top,bottom = cx-width/2,cx+width/2,cy-height/2,cy+height/2
@@ -1096,7 +1121,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		#Archer("red",self.cols-4,self.rows-4) #HARDCODED
 		#Swordsman("blue",3,3)
 		Warrior("blue",2,2) #HARDCODED
-		#Ship("blue",1,7) #HARDCODED
+		Ship("blue",1,7) #HARDCODED
 		#Settler("red",3,1)
 
 	def drawUnits(self):
@@ -1115,10 +1140,45 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			color = unit.team
 			if unit.selected:
 				color = "yellow"
-			self.canvas.create_text(cx,cy,text = typeStr[typeStr.find(".")+1:
-				typeStr.find(".")+3],
-				anchor = CENTER,fill = color) #teams are colors for now.
-											  	#maybe have unit.color later
+				adj60,adj30,r = self.adj60,self.adj30,self.r
+				self.canvas.create_polygon(cx,          cy-r,
+										   cx+adj60,    cy-adj30,
+										   cx+adj60,    cy+adj30,
+										   cx,          cy+r,
+										   cx-adj60,    cy+adj30,
+										   cx-adj60,    cy-adj30,
+										   fill = "", outline = "yellow",
+										   width = r/50)
+			if type(unit) == Warrior:
+				if unit.team == "blue":
+					self.canvas.create_image(cx,cy,image=self.bWarrior)
+				else:
+					self.canvas.create_image(cx,cy,image=self.rWarrior)
+			elif type(unit) == Settler:
+				if unit.team == "blue":
+					self.canvas.create_image(cx,cy,image=self.bSettler)
+				else:
+					self.canvas.create_image(cx,cy,image=self.rSettler)
+			elif type(unit) == Swordsman:
+				if unit.team == "blue":
+					self.canvas.create_image(cx,cy,image=self.bSwordsman)
+				else:
+					self.canvas.create_image(cx,cy,image=self.rSwordsman)
+			elif type(unit) == Archer:
+				if unit.team == "blue":
+					self.canvas.create_image(cx,cy,image=self.bArcher)
+				else:
+					self.canvas.create_image(cx,cy,image=self.rArcher)
+			elif type(unit) == Ship:
+				if unit.team == "blue":
+					self.canvas.create_image(cx,cy,image=self.bShip)
+				else:
+					self.canvas.create_image(cx,cy,image=self.rShip)
+			else:
+				self.canvas.create_text(cx,cy,text = typeStr[typeStr.find(".")+1:
+					typeStr.find(".")+3],
+					anchor = CENTER,fill = color) #teams are colors for now.
+												  	#maybe have unit.color later
 
 	def drawCities(self):
 		left,adj60,top,r,adj30=self.left,self.adj60,self.top,self.r,self.adj30
@@ -1135,9 +1195,19 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			color = city.team
 			if city.selected:
 				color = "yellow"
-			self.canvas.create_text(cx,cy,text = typeStr[typeStr.find(".")+1:
-				typeStr.find(".")+3],
-				anchor = CENTER,fill = color) #teams are colors for now.
+				adj60,adj30,r = self.adj60,self.adj30,self.r
+				self.canvas.create_polygon(cx,          cy-r,
+										   cx+adj60,    cy-adj30,
+										   cx+adj60,    cy+adj30,
+										   cx,          cy+r,
+										   cx-adj60,    cy+adj30,
+										   cx-adj60,    cy-adj30,
+										   fill = "", outline = "yellow",
+										   width = r/50)
+			self.canvas.create_image(cx+1,cy,image=self.city)
+			#self.canvas.create_text(cx,cy,text = typeStr[typeStr.find(".")+1:
+			#	typeStr.find(".")+3],
+			#	anchor = CENTER,fill = color) #teams are colors for now.
 											  	#maybe have unit.color later
 
 	def indicateMovableTiles(self):
@@ -1224,7 +1294,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 	def drawAroundBoard(self): #the beige around the board
 		color="#fff7d2"
 		outline = color
-		width = 0
+		width = 2
 		self.canvas.create_rectangle(0,0,self.left,self.canvasHeight,
 			fill=color,width=width,outline=outline)
 		self.canvas.create_rectangle(self.left,0,self.right,self.top,
@@ -1275,12 +1345,153 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			outline = "#632017", width = 1)
 		self.canvas.create_text((self.right+self.canvasWidth)/2,
 			(self.canvasHeight/2+self.canvasHeight/3)/2+15,
-			text = "Status Box", fill = "#632017",font = "CenturyGothic 18")
+			text = "Status Box", fill = "#632017",font = "CenturyGothic 20")
 
 	def drawInteractionBox(self):
 		self.canvas.create_rectangle(self.right+50,self.top,
 			self.canvasWidth-50,self.canvasHeight/3,fill="#d6d1c4",
 			outline = "#632017", width = 1)
+		if self.selectedUnit:
+			unit = self.selectedUnit
+			if isinstance(unit,Warrior):
+				self.doWarriorInt()
+			elif isinstance(unit,Swordsman):
+				self.doSwordsManInt()
+			elif isinstance(unit,Settler):
+				self.doSettlerInt()
+			elif isinstance(unit,Ship):
+				self.doShipInt()
+			elif isinstance(unit,Archer):
+				self.doArcherInt()
+		elif self.selectedCity:
+			city = self.selectedCity
+			self.doCityInt()
+		else:
+			self.noneSelected()
+
+	def noneSelected(self):
+		self.canvas.create_text((self.right+self.canvasWidth)/2,
+			self.top+(self.top+self.canvasHeight/3)/2/3,
+			text = "Click on one of your units or cities to interact.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 15")
+		#self.canvas.create_text((self.right+self.canvasWidth)/2,
+		#	self.top+2*(self.top+self.canvasHeight/3)/2/3,
+		#	text = "Press Enter/Return to have the computer play a move.",
+		#	anchor = CENTER,
+		#	fill ="#632017",
+		#	font = "CenturyGothic 15")
+		self.canvas.create_text((self.right+self.canvasWidth)/2,
+			self.top+3*(self.top+self.canvasHeight/3)/2/3,
+			text = "Press Space to advance to the next turn.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 15")
+
+	def doWarriorInt(self):
+		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		self.canvas.create_text((self.right+self.canvasWidth)/2,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.8,
+			text = "Warrior",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 17")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.5,
+			text = "Health: %d\tMoves Remaining: %d" % (
+				self.selectedUnit.health,self.selectedUnit.moves),
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")	
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.3,
+			text = "Attack: %d\t\tDefense: %d" % (self.selectedUnit.atk,
+				self.selectedUnit.df),
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		#self.canvas.create_text(self.right+55,
+		#	(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+		#		)/2-self.top)*-.2,
+		#	text = "Defense: %d" % self.selectedUnit.df,
+		#	anchor = W,
+		#	fill ="#632017",
+		#	font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.3,
+			text = "Click a highlighted tile to move there.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.5,
+			text = "If you are next to an enemy, click on it to attack.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.7,
+			text = "If you are next to friendly ship, click on it to board.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+
+	def doSwordsManInt(self):
+		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		self.canvas.create_text((self.right+self.canvasWidth)/2,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.8,
+			text = "Swordsman",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 17")
+
+	def doSettlerInt(self):
+		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		self.canvas.create_text((self.right+self.canvasWidth)/2,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.8,
+			text = "Settler",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 17")
+
+	def doShipInt(self):
+		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		self.canvas.create_text((self.right+self.canvasWidth)/2,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.8,
+			text = "Ship",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 17")
+
+	def doArcherInt(self):
+		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		self.canvas.create_text((self.right+self.canvasWidth)/2,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.8,
+			text = "Archer",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 17")
+
+	def doCityInt(self):
+		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		self.canvas.create_text((self.right+self.canvasWidth)/2,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.8,
+			text = "City",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 17")
 
 	def updateStatusListFromBattle(self,damageDealt,damageRetaliated,
 		selfHealth,otherHealth,unpackedTile):
@@ -1351,14 +1562,35 @@ class Civilization(Animation): #basis of the "board" and how things will move
 					color = "Red" if unit.team == "red" else "Blue"
 					unitString = (color + " " + typeStr[typeStr.find(".")+1:
 						-2])
-					if isinstance(unit,Military):
+					if isinstance(unit,Land):
 						rank = chr(ord(str(unit.rank)[0])-32)+str(unit.rank)[1:]
-						unitString += ("\nHealth: " + str(unit.health) +"\nAttack "
+						unitString += ("\nHealth: " + str(unit.health) +"\nAttack: "
 							+ str(unit.atk) + "\nDefense: " + str(unit.df) + "\n" +
-							"Rank: " + rank)
-					self.canvas.create_text(self.mseX+1,self.mseY-66,
-						text = unitString, fill = "black", anchor = NW,
-						font = "CenturyGothic 10")
+							"Moves Left: " + str(unit.moves))
+						self.canvas.create_text(self.mseX+1,self.mseY-66,
+							text = unitString, fill = "black", anchor = NW,
+							font = "CenturyGothic 10")
+					elif isinstance(unit,Range):
+						unitString += ("\nHealth: " + str(unit.health) +"\nAttack: "
+							+ str(unit.atk) + "\nDefense: " + str(unit.df) + "\n" +
+							"Moves Left: " + str(unit.moves) + "\nRange: " + 
+							str(unit.range))
+						self.canvas.create_text(self.mseX+1,self.mseY-66,
+							text = unitString, fill = "black", anchor = NW,
+							font = "CenturyGothic 9")
+					elif isinstance(unit,Marine):
+						unitString += ("\nOn Board: " + 
+							str(unit.currentCapacity) +"\nMax Capacity: "
+							+ str(unit.capacity) + "\nMoves Left: " + 
+							str(unit.moves))
+						self.canvas.create_text(self.mseX+1,self.mseY-66,
+							text = unitString, fill = "black", anchor = NW,
+							font = "CenturyGothic 10")
+					elif isinstance(unit,Settler):
+						unitString += ("\nMoves Left: " + str(unit.moves))
+						self.canvas.create_text(self.mseX+1,self.mseY-66,
+							text = unitString, fill = "black", anchor = NW,
+							font = "CenturyGothic 10")
 				elif ((indexA,indexB) in City.cityDict and
 					City.cityDict[(indexA,indexB)]):
 					city = list(City.cityDict[(indexA,indexB)])[0]
@@ -1367,7 +1599,8 @@ class Civilization(Animation): #basis of the "board" and how things will move
 						fill="white",outline="black",width=2)
 					color = "Red" if city.team == "red" else "Blue"
 					cityString = (color + " City" + "\nCurrent Production\n" + 
-						"   Shields: " + str(city.currentProduction))
+						"   Shields: " + str(city.currentProduction) + 
+						"\nHealth: " + str(city.health))
 					self.canvas.create_text(self.mseX+1,self.mseY-66,
 						text = cityString, fill = "black", anchor = NW,
 						font = "CenturyGothic 10")
@@ -1497,6 +1730,18 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		self.mousePress = False
 		self.mouseRelease = True
 		self.background = PhotoImage(file="background.gif")
+		#self.warriorInt = PhotoImage(file="warrior-int.gif")
+		self.bWarrior = PhotoImage(file="blue-warrior.gif")
+		self.rWarrior = PhotoImage(file="red-warrior.gif")
+		self.rSettler = PhotoImage(file="red-settler.gif")
+		self.bSettler = PhotoImage(file="blue-settler.gif")
+		self.bSwordsman = PhotoImage(file="blue-swordsman.gif")
+		self.rSwordsman = PhotoImage(file="red-swordsman.gif")
+		self.rArcher = PhotoImage(file="red-archer.gif")
+		self.bArcher = PhotoImage(file="blue-archer.gif")
+		self.bShip = PhotoImage(file="blue-ship.gif")
+		self.rShip = PhotoImage(file="red-ship.gif")
+		self.city = PhotoImage(file="city.gif")
 
 	def redrawAll(self): #redraws all
 		if self.splashScreen:
@@ -1509,7 +1754,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 				if self.showUnits:
 					self.drawUnits()
 					self.drawCities()
-				#self.drawAroundBoard()
+				self.drawAroundBoard()
 				self.parchmentBackground()
 				if self.showUnits:
 					self.drawHoverMenus()
