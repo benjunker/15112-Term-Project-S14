@@ -79,11 +79,11 @@ class Unit(Interactable): #generic unit class
 
 	unitSet = set()
 
-	effectiveDict = {"very ineffective" : 1,
-					 "ineffective"      : 2,
+	effectiveDict = {"very ineffective" : 2,
+					 "ineffective"      : 2.5,
 					 "neutral"          : 3,
-					 "effective"        : 4,
-					 "very effective"   : 5}
+					 "effective"        : 3.5,
+					 "very effective"   : 4}
 					 #quantifies effectiveness
 
 	normalDict = {0 : "very ineffective",
@@ -322,7 +322,7 @@ class Military(Unit):
 	def attack(self,other,selfSuccess,otherSuccess): #dealing damage
 		otherBefore = other.health
 		damage = 3*selfSuccess*self.atk-otherSuccess*other.df
-		other.health = other.health - damage if damage>0 else other.health
+		other.health = other.health - int(damage) if damage>0 else other.health
 		otherAfter = other.health
 		self.damage = damage if damage>0 else 0
 		return damage if damage>0 else 0
@@ -332,7 +332,7 @@ class Military(Unit):
 	def retaliate(self,other,selfSuccess,otherSuccess): #retaliating after atk
 		otherBefore = other.health
 		damage = (3*selfSuccess*self.atk-otherSuccess*other.df)/2
-		other.health = other.health - damage if damage>0 else other.health
+		other.health = other.health - int(damage) if damage>0 else other.health
 		otherAfter = other.health
 		self.damage = damage if damage>0 else 0
 		return damage if damage>0 else 0
@@ -380,9 +380,9 @@ class Swordsman(Land):
 	sight = moves = 2
 
 	def __init__(self,team=None,xPos=None,yPos=None,health=100):
-		atk,df,mives,sight = (Swordsman.atk,Swordsman.df,Swordsman.sight,
+		atk,df,sight,moves = (Swordsman.atk,Swordsman.df,Swordsman.sight,
 			Swordsman.moves)
-		super(Swordsman,self).__init__(atk,df,team,moves,cPos,yPos,sight,
+		super(Swordsman,self).__init__(atk,df,team,moves,xPos,yPos,sight,
 			health)
 
 class Range(Military):
@@ -416,6 +416,7 @@ class Range(Military):
 		self.attackSet = self.findDiamondAttackTilesGivenSet(indexA,indexB,
 			n,self.findBoundingBoxAttackTiles(indexA,indexB,n))
 		if (other.xPos,other.yPos) in self.attackSet:
+			print "!"
 			return super(Range,self).battle(other,moveDict)
 		else:
 			return None,None,None,None,False
@@ -511,7 +512,8 @@ class City(Interactable): #Cities make units
 	productionCost = {"Warrior"   : 7,
 					  "Settler"   : 10,
 					  "Archer"    : 8,
-					  "Swordsman" : 12} #create this before the game
+					  "Swordsman" : 12,
+					  "Ship"      : 9} #create this before the game
 						  #ex --> {"Warrior" : 2}
 
 	def __init__(self,team,xPos,yPos,health=200):
@@ -529,8 +531,19 @@ class City(Interactable): #Cities make units
 		super(City,self).__init__()
 
 	def determineProductionLevel(self):
-		return 2 #heuristic, for now
-		#this is a funciton of population,resources,building,etc
+		cityCount = 0
+		for city in City.citySet:
+			if city.team == self.team:
+				cityCount += 1
+		prodDict = {1 : 2,
+					2 : 2.5,
+					3 : 3,
+					4 : 2.5,
+					5 : 2}
+		if cityCount in prodDict:
+			return prodDict[cityCount]
+		else:
+			return 1.5
 
 	def produceShields(self): #increase production ability. not on Tkinter yet
 		productionLevel = self.determineProductionLevel()
@@ -548,20 +561,39 @@ class City(Interactable): #Cities make units
 				try: unit = Unit.unitDict[(xPos,yPos)]
 				except: unit = None
 				if not(city or unit) and (xPos,yPos) in Tile.tileDict:
-					if not isinstance(eval(unitType),Marine):
+					marineString = ["Ship"]
+					if not unitType in marineString:
 						if Tile.terrainDict[(xPos,yPos)] == "land":
 							createStr = "%s(\"%s\",%d,%d)" % (unitType,self.team,
 								xPos,yPos)
 							self.currentProduction -= unitCost
 							eval(createStr)
 							return
-					else:
+					else: #ships are currently spawning on land
 						if Tile.terrainDict[(xPos,yPos)] == "water":
 							createStr = "%s(\"%s\",%d,%d)" % (unitType,self.team,
 								xPos,yPos)
 							self.currentProduction -= unitCost
 							eval(createStr)
 							return
+
+	def takeDamage(self,unit):
+		luck = random.randint(0,9)#for pmf
+		success = Unit.rankDict[unit.rank][luck]#gets qualified success
+		successNumber = Unit.effectiveDict[success] #quantifies success
+		cityDefense = 3.5
+		cityLuck = 3
+		damage = 3*successNumber*unit.atk-cityDefense*cityLuck
+		self.health = self.health - int(damage) if damage>0 else self.health
+		unit.moves = 0
+		unit.battled = True
+		self.checkLife()
+		return int(damage) if damage > 0 else 0
+
+	def checkLife(self):
+		if self.health <= 0:
+			City.cityDict[(self.xPos,self.yPos)].remove(self)
+			City.citySet.remove(self)
 
 class Civilization(Animation): #basis of the "board" and how things will move
 
@@ -683,7 +715,8 @@ class Civilization(Animation): #basis of the "board" and how things will move
 					self.deselectCurrentlySelectedUnit()
 				elif unpackedTile.team != self.player: #interact with other
 					if (not self.selectedUnit.battled and #unit
-						self.selectedUnit.moves > 0):
+						self.selectedUnit.moves > 0 and
+						not isinstance(unpackedTile,City)):
 						(damageDealt,damageRetaliated,selfHealth,otherHealth,
 							battled) = self.selectedUnit.battle(unpackedTile,
 							self.moveDict)
@@ -701,6 +734,12 @@ class Civilization(Animation): #basis of the "board" and how things will move
 								otherColor,otherUnitString)
 							self.statusTextList.append(addend)
 						self.deselectCurrentlySelectedUnit()
+			elif isinstance(unpackedTile,City):
+				if (not self.selectedUnit.battled and #unit
+					self.selectedUnit.moves > 0):
+					damage = unpackedTile.takeDamage(self.selectedUnit)
+					self.constructCityString(damage)
+					self.deselectCurrentlySelectedUnit()
 			elif (indexA,indexB) in self.moveDict: #move unit
 				self.selectedUnit.move(indexA,indexB,self.moveDict)
 				self.deselectCurrentlySelectedUnit()
@@ -791,6 +830,9 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			#	self.splashScreen = not(self.splashScreen)
 			else:
 				self.switchPlayer()
+				selfColor = "Red" if self.player=="red" else "Blue"
+				addend = "It is now the %s player's turn." % selfColor
+				self.statusTextList.append(addend)
 				self.deselectCurrentlySelectedUnit()
 				self.reset() #happens at the beginning of the turn
 		elif event.keysym == "h":
@@ -820,6 +862,14 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		elif event.keysym == "l":
 			if isinstance(self.selectedUnit,Marine):
 				self.selectedUnit.unload()
+				self.deselectCurrentlySelectedUnit()
+		elif event.keysym == "m":
+			if self.selectedCity:
+				self.selectedCity.createUnit("Swordsman")
+				self.deselectCurrentlySelectedUnit()
+		elif event.keysym == "p":
+			if self.selectedCity:
+				self.selectedCity.createUnit("Ship")
 				self.deselectCurrentlySelectedUnit()
 		#print self.indexA,self.indexB
 
@@ -1043,8 +1093,11 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		Settler("red",self.cols-2,self.rows-2) #FIX, doesn't work for odd ones
 		Settler("blue",1,1) #HARDCODED
 		Warrior("red",self.cols-3,self.rows-3) #HARDCODED
+		#Archer("red",self.cols-4,self.rows-4) #HARDCODED
+		#Swordsman("blue",3,3)
 		Warrior("blue",2,2) #HARDCODED
-		Ship("blue",1,7) #HARDCODED
+		#Ship("blue",1,7) #HARDCODED
+		#Settler("red",3,1)
 
 	def drawUnits(self):
 		left,adj60,top,r,adj30=self.left,self.adj60,self.top,self.r,self.adj30
@@ -1190,6 +1243,15 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		#HARDCODED
 		self.canvas.create_image(0,0,image = self.background,anchor = NW)
 
+	def constructCityString(self,damage):
+		selfColor = "Red" if self.selectedUnit.team == "red" else "Blue"
+		otherColor = "Blue" if selfColor == "Red" else "Red"
+		selfTypeStr = str(type(self.selectedUnit))
+		selfUnitString = selfTypeStr[selfTypeStr.find(".")+1:-2]
+		addend = "Your %s %s did %d damage to the %s City." % (selfColor,
+			 selfUnitString,damage,otherColor)
+		self.statusTextList.append(addend)
+
 	def drawStatusBox(self):
 		self.canvas.create_rectangle(self.right+50,self.canvasHeight/2,
 			self.canvasWidth-50,self.canvasHeight-50,fill="#d6d1c4",
@@ -1199,21 +1261,21 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		for event in reversed(self.statusTextList):
 			count += 1
 			if (self.canvasHeight-50>self.canvasHeight-70-count*35>
-				(self.canvasHeight/2)+25):
-				self.canvas.create_text(self.right+51,
-					self.canvasHeight-70-count*35,
+				(self.canvasHeight/2)+10):
+				self.canvas.create_text(self.right+52,
+					self.canvasHeight-80-count*35,
 					text = event, anchor = W,
 					font = "CenturyGothic 14",
 					fill = "#632017",
 					width=self.canvasWidth-50-self.right-50)
 
 	def drawPromptBox(self):
-		self.canvas.create_rectangle(self.right+50,self.canvasHeight/3+25,
-			self.canvasWidth-50,self.canvasHeight/2-25,fill="#d6d1c4",
+		self.canvas.create_rectangle(self.right+50,self.canvasHeight/3+40,
+			self.canvasWidth-50,self.canvasHeight/2-10,fill="#d6d1c4",
 			outline = "#632017", width = 1)
 		self.canvas.create_text((self.right+self.canvasWidth)/2,
-			(self.canvasHeight/2+self.canvasHeight/3)/2,
-			text = "Prompt Bar", fill = "#632017",font = "CenturyGothic 18")
+			(self.canvasHeight/2+self.canvasHeight/3)/2+15,
+			text = "Status Box", fill = "#632017",font = "CenturyGothic 18")
 
 	def drawInteractionBox(self):
 		self.canvas.create_rectangle(self.right+50,self.top,
