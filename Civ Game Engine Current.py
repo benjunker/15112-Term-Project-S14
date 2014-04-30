@@ -10,6 +10,7 @@
 #crashes if you click enemy unit outside move range
 #add creating archers to cities
 #add range to archers hover menus
+#all units can swim for a short distance of 1 water tile. This expends a move
 
 from Tkinter import *
 import random
@@ -174,6 +175,10 @@ class Unit(Interactable): #generic unit class
 	def battle(self): pass
 	def attack(self): pass
 	def retaliate(self): pass
+
+class Marine(Unit):
+	def  __init__(self,team,moves,xPos,yPos,sight,
+		state="neutral",selected=False):pass
 
 class Military(Unit):
 	#for military (attacking) units
@@ -644,12 +649,12 @@ class Civilization(Animation): #basis of the "board" and how things will move
 														   #numbers over tiles
 		elif event.keysym == "u": self.showUnits = not(self.showUnits)
 		elif event.keysym == "space":
-			#if self.splashScreen:
+			if self.splashScreen:pass
 			#	self.splashScreen = not(self.splashScreen)
-			# else:
-			self.switchPlayer()
-			self.deselectCurrentlySelectedUnit()
-			self.reset() #happens at the beginning of the turn
+			else:
+				self.switchPlayer()
+				self.deselectCurrentlySelectedUnit()
+				self.reset() #happens at the beginning of the turn
 		elif event.keysym == "h":
 			self.help = not(self.help)
 		elif event.keysym == "s":
@@ -692,8 +697,8 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		self.topEdge = top+self.adjY
 		self.bottomEdge = top + r if rows%2 == 0 else top+2*r+adj30+self.adjY
 		self.bottomEdge += rows/2*2*(r+adj30) + r
-		self.canvas.create_rectangle(self.left,self.top,self.right,self.bottom,
-			fill = "black")
+		self.canvas.create_rectangle(self.left-5,self.top-5,self.right+5,self.bottom+5,
+			fill = "#b79e76",width=10,outline="#b79e76")
 		for tile in Tile.tileSet:
 			color = "#d2d2d2"
 			color = "purple"
@@ -701,9 +706,9 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			cx += self.adjX
 			cy += self.adjY
 			if tile.terrain == "land":
-				color = "#F4A460"
+				color = "#a27741"
 			elif tile.terrain == "water":
-				color = "#3be6ff"
+				color = "#34a1d3"
 			if ((self.right+2*self.adj60>cx>self.left-2*adj60) and
 				(self.bottom+2*r>cy>self.top-2*r)):
 				self.canvas.create_polygon(cx,          cy-r,
@@ -714,13 +719,14 @@ class Civilization(Animation): #basis of the "board" and how things will move
 										   cx-adj60,    cy-adj30,
 										   fill = color, outline = "black",
 										   width = r/50)#line width heuristic
+				#self.canvas.create_text(cx,cy,text=tile.terrain)
 				if self.coords:self.canvas.create_text(cx,cy,text="%d,%d"%(
 					tile.indexA,tile.indexB),font="Helvetica %d" % 
 					(int(self.r/1.5))) #superimpose numbers
 		#self.canvas.create_rectangle(self.left,self.top,self.right,self.bottom)
 		#bounding rectangle to show what the board actually is
 
-	def initBoard(self,cx=400,cy=250,width=700,height=400,r=15,random=True): #creates tiles
+	def initBoard(self,cx=400,cy=250,width=700,height=400,r=21,random=True): #creates tiles
 		cy = cy if cy != 250 else self.canvasHeight/2
 		height = height if height != 400 else self.canvasHeight-(cx-width/2)*2
 		left,right,top,bottom = cx-width/2,cx+width/2,cy-height/2,cy+height/2
@@ -802,7 +808,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 				Tile.waterDict[(indexA,indexB)] = tile
 
 	def findPosLandNMovesAway(self,indexA,indexB,n):
-		boundingBoxTiles = self.findBoundingBoxMoves(indexA,indexB,n)
+		boundingBoxTiles = self.findPossibleLandTilesBox(indexA,indexB,n)
 		diamondTilesGivenSet = self.findDiamondMovesGivenSet(indexA,indexB,n,
 			boundingBoxTiles)
 		tilesNMovesAway = diamondTilesGivenSet
@@ -888,7 +894,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		#the dot, which represents a unit, has an arbitrary radius of 5
 
 	def initUnits(self): #arbitrary
-		Settler("red",self.cols-2,self.rows-2)
+		Settler("red",self.cols-2,self.rows-2) #FIX, doesn't work for odd ones
 		Settler("blue",1,1)
 		Warrior("red",self.cols-3,self.rows-3)
 		Warrior("blue",2,2)
@@ -952,9 +958,9 @@ class Civilization(Animation): #basis of the "board" and how things will move
 					cy < self.top): continue
 				r = self.r
 				if Tile.terrainDict[(indexA,indexB)] == "water":
-					color = "#b4dce9"
+					color = "#9ab7d4"
 				else:
-					color = "#fbc0a7"
+					color = "#d1a28b"
 				self.canvas.create_polygon(cx,          cy-r,
 										   cx+adj60,    cy-adj30,
 										   cx+adj60,    cy+adj30,
@@ -981,8 +987,9 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			boundingBoxMoves)
 		legalMovesForN = diamondMovesGivenSet
 		for move in legalMovesForN:
-			self.moveDict[move] = n
-			self.moveSet.add(move)
+			if Tile.terrainDict[move] == "land":
+				self.moveDict[move] = n
+				self.moveSet.add(move)
 
 	def findBoundingBoxMoves(self,indexA,indexB,n):
 		boundingBoxSet = set()
@@ -1026,6 +1033,9 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		self.canvas.create_line(right,top,right,bottom,width=width)
 		self.canvas.create_line(right,bottom,left,bottom,width=width)
 		self.canvas.create_line(left,bottom,left,top,width=width)
+
+	def parchmentBackground(self):
+		self.canvas.create_image(0,0,image = self.background,anchor = NW)
 
 	def drawStatusBox(self):
 		self.canvas.create_rectangle(self.right+50,self.canvasHeight/3,
@@ -1182,7 +1192,8 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		string += "If there is an enemy unit on the tile you click, you are"
 		string += " right next to that tile, and you haven't used all of your"
 		string += " moves,\n\tyou will battle.\n"
-		string += "Use the arrow keys to scroll around the board.\n"
+		string += "Use the mouse keys to scroll around the board.\n"
+		string += "Hover over a unit to see information.\n"
 		string += "Press Space to end your turn.\n"
 		string += "Press 'c' with a Settler selected to found a City.\n"
 		string += "Press 'w' with a City selected to build a warrior and 's' "
@@ -1202,7 +1213,8 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		string += "Unit (warrior) health is displayed in the console window.\n"
 		string += "\nDebug:\n"
 		string += "Press 'd' to toggle tile indicies.\n"
-		string += "Press 'u' to toggle units/cities.\n\n"
+		string += "Press 'u' to toggle units/cities.\n"
+		string += "Press 'h' to toggle help."
 		self.canvas.create_text(0,0,
 			text = string, font = "Helvtica 12", anchor = NW)
 
@@ -1215,6 +1227,8 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		Tile.landDict = {}
 		Tile.waterDict = {}
 		Tile.terrainDict = {}
+		City.cityDict = {}
+		City.citySet = set()
 		#add inital production options in init
 		#add consequent production options in science engine
 		self.initBoard()
@@ -1227,7 +1241,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		self.coords = False
 		self.adjX = 0
 		self.adjY = 0
-		self.showUnits = False
+		self.showUnits = True
 		self.selectedUnit = None
 		self.player = "blue"
 		self.splashScreen = True
@@ -1252,6 +1266,7 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		self.image = self.start
 		self.mousePress = False
 		self.mouseRelease = True
+		self.background = PhotoImage(file="background.gif")
 
 	def redrawAll(self): #redraws all
 		if self.splashScreen:
@@ -1264,7 +1279,8 @@ class Civilization(Animation): #basis of the "board" and how things will move
 				if self.showUnits:
 					self.drawUnits()
 					self.drawCities()
-				self.drawAroundBoard()
+				#self.drawAroundBoard()
+				self.parchmentBackground()
 				if self.showUnits:
 					self.drawHoverMenus()
 				self.turnIndicator()
