@@ -1,16 +1,8 @@
-#more effective search function --> use mouse position as location heruistic
-#"dot" "shifts" to the right for larger numbers --> (floating point errors?)
-#determine indecies in initBoard! Do not wait to extrapolate in __init__ --> Done!
-#Do gross math for efficient mouse click search.... --> Yay!
-#rewrite the unitAction function. Try/Except is killing everything. --> Fixed!
-#Two TKinter windows for my term project?
-#No win condition, as of yet
-#crashes if they both die --> fixed!
-#rewrite damage calculation
-#crashes if you click enemy unit outside move range
-#add creating archers to cities
-#add range to archers hover menus
-#all units can swim for a short distance of 1 water tile. This expends a move
+#Benjamin Junker
+#Andrew ID: bjunker
+
+#Note: This game is intended to run in 1280x720 resolution.
+#Note: Failure to do say may result in subpar gameplay
 
 from Tkinter import *
 import random
@@ -158,12 +150,22 @@ class Unit(Interactable): #generic unit class
 	def move(self,indexA,indexB,moveDict):
 		if (indexA,indexB) not in moveDict: return
 		else:
-			if (indexA,indexB) not in City.cityDict:
+			if (indexA,indexB) in City.cityDict:
+				if not City.cityDict[(indexA,indexB)]:
+					Unit.unitDict[(self.xPos,self.yPos)].remove(self)
+					self.xPos,self.yPos = indexA,indexB
+					try: Unit.unitDict[(self.xPos,self.yPos)].add(self)
+					except: Unit.unitDict[(self.xPos,self.yPos)] = set([self])
+					if len(Unit.unitDict[(self.xPos,self.yPos)])>1: assert(
+						False)
+					self.moves -= moveDict[(self.xPos,self.yPos)]
+			else:
 				Unit.unitDict[(self.xPos,self.yPos)].remove(self)
 				self.xPos,self.yPos = indexA,indexB
 				try: Unit.unitDict[(self.xPos,self.yPos)].add(self)
 				except: Unit.unitDict[(self.xPos,self.yPos)] = set([self])
-				if len(Unit.unitDict[(self.xPos,self.yPos)])>1: assert(False)
+				if len(Unit.unitDict[(self.xPos,self.yPos)])>1: assert(
+					False)
 				self.moves -= moveDict[(self.xPos,self.yPos)]
 
 	def reset(self):
@@ -244,18 +246,9 @@ class Marine(Unit):
 						if Tile.terrainDict[place] == "land":
 					#		print " "*count + str(place) + "3"
 							if len(self.unitSet)> 0:
-								if place not in Unit.unitDict:
-					#			print " "*count + str(place) + "4"
-									unitList = list(self.unitSet)
-									unit = unitList.pop()
-									unit.xPos = place[0]
-									unit.yPos = place[1]
-									Unit.unitSet.add(unit)
-									try: Unit.unitDict[(unit.xPos,unit.yPos)].add(unit)
-									except: Unit.unitDict[(unit.xPos,
-										unit.yPos)] = set([unit])
-								elif place in Unit.unitDict:
-									if not Unit.unitDict[place]:
+								if place not in City.cityDict:
+									if place not in Unit.unitDict:
+						#			print " "*count + str(place) + "4"
 										unitList = list(self.unitSet)
 										unit = unitList.pop()
 										unit.xPos = place[0]
@@ -264,8 +257,43 @@ class Marine(Unit):
 										try: Unit.unitDict[(unit.xPos,unit.yPos)].add(unit)
 										except: Unit.unitDict[(unit.xPos,
 											unit.yPos)] = set([unit])
-								#unit.reset(x)
-								self.unitSet = set(unitList)
+									elif place in Unit.unitDict:
+										if not Unit.unitDict[place]:
+											unitList = list(self.unitSet)
+											unit = unitList.pop()
+											unit.xPos = place[0]
+											unit.yPos = place[1]
+											Unit.unitSet.add(unit)
+											try: Unit.unitDict[(unit.xPos,unit.yPos)].add(unit)
+											except: Unit.unitDict[(unit.xPos,
+												unit.yPos)] = set([unit])
+									#unit.reset(x)
+									try: self.unitSet = set(unitList)
+									except: pass
+								elif not City.cityDict[place]:
+									if place not in Unit.unitDict:
+						#			print " "*count + str(place) + "4"
+										unitList = list(self.unitSet)
+										unit = unitList.pop()
+										unit.xPos = place[0]
+										unit.yPos = place[1]
+										Unit.unitSet.add(unit)
+										try: Unit.unitDict[(unit.xPos,unit.yPos)].add(unit)
+										except: Unit.unitDict[(unit.xPos,
+											unit.yPos)] = set([unit])
+									elif place in Unit.unitDict:
+										if not Unit.unitDict[place]:
+											unitList = list(self.unitSet)
+											unit = unitList.pop()
+											unit.xPos = place[0]
+											unit.yPos = place[1]
+											Unit.unitSet.add(unit)
+											try: Unit.unitDict[(unit.xPos,unit.yPos)].add(unit)
+											except: Unit.unitDict[(unit.xPos,
+												unit.yPos)] = set([unit])
+									#unit.reset(x)
+									try: self.unitSet = set(unitList)
+									except: pass
 				n += 1
 		self.currentCapacity = len(self.unitSet)
 		self.capacityTest()
@@ -378,7 +406,7 @@ class Land(Military):
 class Warrior(Land):
 	atk = df = moves = sight = 2 #arbitrary
 
-	def __init__(self,team=None,xPos=None,yPos=None,health=100):
+	def __init__(self,team=None,xPos=None,yPos=None,health=10):
 		atk,df,moves,sight = Warrior.atk,Warrior.df,Warrior.moves,Warrior.sight
 		super(Warrior,self).__init__(atk,df,team,moves,xPos,yPos,sight,health)
 
@@ -471,6 +499,9 @@ class Settler(Support):
 		Unit.unitDict[(self.xPos,self.yPos)].remove(self)
 		Unit.unitSet.remove(self)
 		City(self.team,self.xPos,self.yPos)
+
+	def battle(self,a,b):
+		return 0,0,0,0,False
 
 class Tile(object): #tiles that make up the board
 	tileSet = set() #list of all tiles to iterate through
@@ -670,8 +701,6 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		if not(self.splashScreen) and not(self.help):
 			indexA,indexB = self.calcMousePosition(event)
 			self.unitAction(indexA,indexB)
-		if event.y<0: #to close better
-			self.help = True
 		#if not self.selected:
 		#	if (self.indexA == indexA) and (self.indexB == indexB):
 		#		self.selected = True
@@ -760,10 +789,13 @@ class Civilization(Animation): #basis of the "board" and how things will move
 						self.deselectCurrentlySelectedUnit()
 			elif isinstance(unpackedTile,City):
 				if (not self.selectedUnit.battled and #unit
-					self.selectedUnit.moves > 0):
+					self.selectedUnit.moves > 0 and
+					unpackedTile.team != self.selectedUnit.team):
 					damage = unpackedTile.takeDamage(self.selectedUnit)
 					self.constructCityString(damage)
 					self.deselectCurrentlySelectedUnit()
+				elif unpackedTile.team == self.player:
+					self.selectUnit(unpackedTile)
 			elif (indexA,indexB) in self.moveDict: #move unit
 				self.selectedUnit.move(indexA,indexB,self.moveDict)
 				self.deselectCurrentlySelectedUnit()
@@ -771,6 +803,9 @@ class Civilization(Animation): #basis of the "board" and how things will move
 				self.deselectCurrentlySelectedUnit()
 		elif self.selectedCity: #deselect city
 			self.deselectCurrentlySelectedUnit()
+			if isinstance(unpackedTile,Interactable):
+				if unpackedTile.team == self.player:
+					self.selectUnit(unpackedTile) #select other unit
 		else:
 			if isinstance(unpackedTile,Interactable):
 				if unpackedTile.team == self.player: #select
@@ -780,15 +815,16 @@ class Civilization(Animation): #basis of the "board" and how things will move
 
 	def unpackTile(self,indexA,indexB): #get thing from tile
 		if (indexA,indexB) in City.cityDict:
-			clickedTileSet = City.cityDict[(indexA,indexB)]
-			clickedTileUnitList = list(clickedTileSet)
-			if len(clickedTileUnitList) == 1:
-				unit = clickedTileUnitList[0]
-				return unit
-			elif len(clickedTileUnitList) == 0:
-				return
-			else:
-				assert(False) #figure out whether/how to deal with multiple units
+			if City.cityDict[(indexA,indexB)]:
+				clickedTileSet = City.cityDict[(indexA,indexB)]
+				clickedTileUnitList = list(clickedTileSet)
+				if len(clickedTileUnitList) == 1:
+					unit = clickedTileUnitList[0]
+					return unit
+				elif len(clickedTileUnitList) == 0:
+					return
+				else:
+					assert(False) #figure out whether/how to deal with multiple units
 		if (indexA,indexB) in Unit.unitDict:
 			clickedTileSet = Unit.unitDict[(indexA,indexB)]
 			clickedTileUnitList = list(clickedTileSet)
@@ -852,6 +888,8 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		elif event.keysym == "space":
 			if self.splashScreen:pass
 			#	self.splashScreen = not(self.splashScreen)
+			elif self.outcome:
+				self.showDisplayOutcome = False
 			else:
 				self.switchPlayer()
 				selfColor = "Red" if self.player=="red" else "Blue"
@@ -877,6 +915,15 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			self.countAdj += 1
 		elif event.keysym == "Down":
 			self.countAdj -= 1
+		elif event.keysym == "Right":
+			if not self.help:
+				self.countAdj = 0
+			self.helpPage = self.helpPage + 1 if self.helpPage < 4 else 4
+		elif event.keysym == "Left":
+			if not self.help:
+				self.countAdj = 0
+			elif self.help:
+				self.helpPage = self.helpPage - 1 if self.helpPage > 0 else 0
 		elif event.keysym == "r":
 			self.init()
 		elif event.keysym == "a":
@@ -895,6 +942,18 @@ class Civilization(Animation): #basis of the "board" and how things will move
 			if self.selectedCity:
 				self.selectedCity.createUnit("Ship")
 				self.deselectCurrentlySelectedUnit()
+		elif event.keysym == "e":
+			Unit.unitDict[(self.rWar.xPos,self.rWar.yPos)].remove(self.rWar)
+			Unit.unitDict[(self.rSetl.xPos,self.rSetl.yPos)].remove(self.rSetl)
+			self.rWar.xPos,self.rWar.yPos = 3,1
+			self.rSetl.xPos,self.rSetl.yPos = 4,2
+			try: Unit.unitDict[(self.rWar.xPos,self.rWar.yPos)].add(self.rWar)
+			except: Unit.unitDict[(self.rWar.xPos,self.rWar.yPos)] = set([self.rWar])
+			try: Unit.unitDict[(self.rSetl.xPos,self.rSetl.yPos)].add(self.rSetl)
+			except: Unit.unitDict[(self.rSetl.xPos,self.rSetl.yPos)] = set([self.rSetl])
+			#Unit.unitDict[(self.rWar.xPos,self.rWar.yPos)].add(self.rWar)
+			#Unit.unitDict[(self.rSetl.xPos,self.rSetl.yPos)].add(self.rSetl)
+
 		#print self.indexA,self.indexB
 
 	def switchPlayer(self):
@@ -1115,13 +1174,14 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		#the dot, which represents a unit, has an arbitrary radius of 5
 
 	def initUnits(self): #arbitrary
-		Settler("red",self.cols-2,self.rows-2) #FIX, doesn't work for odd ones
-		Settler("blue",1,1) #HARDCODED
-		Warrior("red",self.cols-3,self.rows-3) #HARDCODED
+		adj = 0 if self.cols%2 == 0 else 1
+		self.rSetl = Settler("red",self.cols-2-adj,self.rows-2) #FIX, doesn't work for odd ones
+		self.bSetl = Settler("blue",1,1) #HARDCODED
+		self.rWar = Warrior("red",self.cols-3-adj,self.rows-3) #HARDCODED
 		#Archer("red",self.cols-4,self.rows-4) #HARDCODED
 		#Swordsman("blue",3,3)
-		Warrior("blue",2,2) #HARDCODED
-		Ship("blue",1,7) #HARDCODED
+		self.bWar = Warrior("blue",2,2) #HARDCODED
+		#Ship("blue",1,7) #HARDCODED
 		#Settler("red",3,1)
 
 	def drawUnits(self):
@@ -1391,10 +1451,11 @@ class Civilization(Animation): #basis of the "board" and how things will move
 
 	def doWarriorInt(self):
 		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		selfColor = "Red" if self.selectedUnit.team == "red" else "Blue"
 		self.canvas.create_text((self.right+self.canvasWidth)/2,
 			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
 				)/2-self.top)*-.8,
-			text = "Warrior",
+			text = "%s Warrior" % selfColor,
 			anchor = CENTER,
 			fill ="#632017",
 			font = "CenturyGothic 17")
@@ -1445,53 +1506,227 @@ class Civilization(Animation): #basis of the "board" and how things will move
 
 	def doSwordsManInt(self):
 		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		selfColor = "Red" if self.selectedUnit.team == "red" else "Blue"
 		self.canvas.create_text((self.right+self.canvasWidth)/2,
 			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
 				)/2-self.top)*-.8,
-			text = "Swordsman",
+			text = "%s Swordsman" % selfColor,
 			anchor = CENTER,
 			fill ="#632017",
 			font = "CenturyGothic 17")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.5,
+			text = "Health: %d\tMoves Remaining: %d" % (
+				self.selectedUnit.health,self.selectedUnit.moves),
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")	
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.3,
+			text = "Attack: %d\t\tDefense: %d" % (self.selectedUnit.atk,
+				self.selectedUnit.df),
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		#self.canvas.create_text(self.right+55,
+		#	(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+		#		)/2-self.top)*-.2,
+		#	text = "Defense: %d" % self.selectedUnit.df,
+		#	anchor = W,
+		#	fill ="#632017",
+		#	font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.3,
+			text = "Click a highlighted tile to move there.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.5,
+			text = "If you are next to an enemy, click on it to attack.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.7,
+			text = "If you are next to friendly ship, click on it to board.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
 
 	def doSettlerInt(self):
 		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		selfColor = "Red" if self.selectedUnit.team == "red" else "Blue"
 		self.canvas.create_text((self.right+self.canvasWidth)/2,
 			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
 				)/2-self.top)*-.8,
-			text = "Settler",
+			text = "%s Settler" % selfColor,
 			anchor = CENTER,
 			fill ="#632017",
 			font = "CenturyGothic 17")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.5,
+			text = "Moves Remaining: %d" % (self.selectedUnit.moves),
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.4,
+			text = "Click a highlighted tile to move there.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.6,
+			text = "If you are next to friendly ship, click on it to board.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
 
 	def doShipInt(self):
 		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		selfColor = "Red" if self.selectedUnit.team == "red" else "Blue"
 		self.canvas.create_text((self.right+self.canvasWidth)/2,
 			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
 				)/2-self.top)*-.8,
-			text = "Ship",
+			text = "%s Ship" % selfColor,
 			anchor = CENTER,
 			fill ="#632017",
 			font = "CenturyGothic 17")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.3,
+			text = "On Board: %d\tMax Capacity: %d" % (
+				self.selectedUnit.currentCapacity,self.selectedUnit.capacity),
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")	
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.5,
+			text = "Moves: %d" % (self.selectedUnit.moves),
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.3,
+			text = "Click a highlighted tile to move there.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.5,
+			text = "If next to land, press 'l' to unload all boarded units.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.7,
+			text = "To board units: select the unit then click the ship when close.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
 
 	def doArcherInt(self):
 		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		selfColor = "Red" if self.selectedUnit.team == "red" else "Blue"
 		self.canvas.create_text((self.right+self.canvasWidth)/2,
 			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
 				)/2-self.top)*-.8,
-			text = "Archer",
+			text = "%s Archer" % selfColor,
 			anchor = CENTER,
 			fill ="#632017",
 			font = "CenturyGothic 17")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.5,
+			text = "Health: %d\tMoves Remaining: %d" % (
+				self.selectedUnit.health,self.selectedUnit.moves),
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")	
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.3,
+			text = "Attack: %d\t\tDefense: %d\tRange: %d" % (
+				self.selectedUnit.atk,self.selectedUnit.df,
+				self.selectedUnit.range),
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		#self.canvas.create_text(self.right+55,
+		#	(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+		#		)/2-self.top)*-.2,
+		#	text = "Defense: %d" % self.selectedUnit.df,
+		#	anchor = W,
+		#	fill ="#632017",
+		#	font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.3,
+			text = "Click a highlighted tile to move there.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.5,
+			text = "If you are in range of an enemy, click on it to attack.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.7,
+			text = "If you are next to friendly ship, click on it to board.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
 
 	def doCityInt(self):
 		#self.canvas.create_image(800,50,image = self.warriorInt,anchor = NE)
+		selfColor = "Red" if self.selectedCity.team == "red" else "Blue"
 		self.canvas.create_text((self.right+self.canvasWidth)/2,
 			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
 				)/2-self.top)*-.8,
-			text = "City",
+			text = "%s City" % selfColor,
 			anchor = CENTER,
 			fill ="#632017",
 			font = "CenturyGothic 17")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.5,
+			text = "Health: %d" % (self.selectedCity.health),
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")	
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*-.3,
+			text = "Production Shields: %d\tProduction Per Turn: %.1f" % (
+				self.selectedCity.currentProduction,
+				self.selectedCity.determineProductionLevel()),
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
+		self.canvas.create_text(self.right+55,
+			(self.top+self.canvasHeight/3)/2+((self.top+self.canvasHeight/3
+				)/2-self.top)*.5,
+			text = "To create units, press the corresponding key, with this city\nselected. For reference, see the help screen.",
+			anchor = W,
+			fill ="#632017",
+			font = "CenturyGothic 14")
 
 	def updateStatusListFromBattle(self,damageDealt,damageRetaliated,
 		selfHealth,otherHealth,unpackedTile):
@@ -1644,42 +1879,401 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		self.canvas.create_image(0,0,image=image,anchor=NW)
 
 	def drawHelp(self): #help screen
-		string = ""
-		string += "The goal of the game is to eliminate all enemy units.\n\n"
-		string += "Blue moves first.\n\n"
-		string += "The square in the upper left corner indicates whose"
-		string += " turn it is.\n\n"
-		string += "Controls:\n"
-		string += "Click on a unit to select it.\n"
-		string += "Then click a highlighted tile to move.\n"
-		string += "If there is an enemy unit on the tile you click, you are"
-		string += " right next to that tile, and you haven't used all of your"
-		string += " moves,\n\tyou will battle.\n"
-		string += "Use the mouse keys to scroll around the board.\n"
-		string += "Hover over a unit to see information.\n"
-		string += "Press Space to end your turn.\n"
-		string += "Press 'c' with a Settler selected to found a City.\n"
-		string += "Press 'w' with a City selected to build a warrior and 's' "
-		string += "to build a Settler, if you have\n\tenough production"
-		string += " shields.\n"
-		string += "Cities create production shields each turn.\n"
-		string += "\nKey:\n"
-		string += "Wa : Warrior\n"
-		string += "Se : Settler\n"
-		string += "Ci : City\n"
-		string += "\nMechaics:\n"
-		string += "You can fight with warriors, create cities with settlers, "
-		string += "and create units with cities.\n"
-		string += "All cities gain +2 production shields at the beggining of "
-		string += "each turn.\n"
-		string += "It costs 5 shields for a warrior and 8 for a settler.\n"
-		string += "Unit (warrior) health is displayed in the console window.\n"
-		string += "\nDebug:\n"
-		string += "Press 'd' to toggle tile indicies.\n"
-		string += "Press 'u' to toggle units/cities.\n"
-		string += "Press 'h' to toggle help."
-		self.canvas.create_text(0,0,
-			text = string, font = "Helvtica 12", anchor = NW)
+		self.canvas.create_image(0,0,image=self.fullBackground,anchor=NW)
+		createStr = "self.drawHelpPg%d()" % self.helpPage
+		eval(createStr)
+
+	def drawHelpPg0(self):
+		xPos = self.canvasWidth/2
+		self.canvas.create_text(xPos,35,
+			text = "Help",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 48")
+		self.canvas.create_text(xPos,self.canvasHeight-35,
+			text = "Use the left/right arrow keys to scroll through the help section.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 28")
+		self.canvas.create_text(self.canvasWidth-5,self.canvasHeight-5,
+			text = "Page 0",
+			anchor = SE,
+			fill ="#632017",
+			font = "CenturyGothic 16")
+		self.canvas.create_text(xPos,135,
+			text = "Table of Contents:",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 26")
+		self.canvas.create_text(xPos,205,
+			text = "Table of Contents : Page 0",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,240,
+			text = "General Gameplay : Page 1",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,275,
+			text = "Units : Page 2",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,310,
+			text = "Cities : Page 3",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,345,
+			text = "Objective : Page 4",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+
+	def drawHelpPg1(self):
+		xPos = self.canvasWidth/2
+		self.canvas.create_text(xPos,35,
+			text = "Help",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 48")
+		self.canvas.create_text(xPos,self.canvasHeight-35,
+			text = "Use the left/right arrow keys to scroll through the help section.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 28")
+		self.canvas.create_text(self.canvasWidth-5,self.canvasHeight-5,
+			text = "Page 1",
+			anchor = SE,
+			fill ="#632017",
+			font = "CenturyGothic 16")
+		self.canvas.create_text(xPos,135,
+			text = "General Gameplay:",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 26")
+		self.canvas.create_text(xPos,205,
+			text = "Click on a unit/city to select it.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,240,
+			text = "Then, click on a highlighted tile to interact with it.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,275,
+			text = "You can move to land tiles, battle enemy military units, and load onto friendly marine units.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,310,
+			text = "You may not move onto a city or stack units (have more than one unit per tile).",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,345,
+			text = "The square in the upper left corner indicates whose turn it is.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,380,
+			text = "Press space to advance to the next player's turn.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,415,
+			text = "Press 'h' to toggle help.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,450,
+			text = "Press 'r' to reset the game.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,485,
+			text = "Hover over a unit to see quick information. Click it to get more detailed infromation.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,510,
+			text = "Scroll over by moveing your mouse to a corner of the board.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+
+	def drawHelpPg2(self):
+		xPos = self.canvasWidth/2
+		self.canvas.create_text(xPos,35,
+			text = "Help",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 48")
+		self.canvas.create_text(xPos,self.canvasHeight-35,
+			text = "Use the left/right arrow keys to scroll through the help section.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 28")
+		self.canvas.create_text(self.canvasWidth-5,self.canvasHeight-5,
+			text = "Page 2",
+			anchor = SE,
+			fill ="#632017",
+			font = "CenturyGothic 16")
+		self.canvas.create_text(xPos,135,
+			text = "Units:",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 26")
+		self.canvas.create_text(xPos,240,
+			text = "Click on a unit to select it.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,205,
+			text = "Unit Types: Warrior, Archer, Swordsman, Settler, and Ship.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,275,
+			text = "If a marine unit is next to land, press 'l' to unload any loaded land units.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,310,
+			text = "You may not move onto a city or stack units (have more than one unit per tile).",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,345,
+			text = "After selecting a unit, click a highlighted tile (or marine unit) to interact.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,380,
+			text = "If you have a Settler selected, press 'c' to found a city at that location.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,415,
+			text = "Land units may only attack units next to them. Range units may attack anyone in their range.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,450,
+			text = "Land units may only stand on land, but may traverse water. The opposite is true for marine units",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+
+	def drawHelpPg3(self):
+		xPos = self.canvasWidth/2
+		self.canvas.create_text(xPos,35,
+			text = "Help",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 48")
+		self.canvas.create_text(xPos,self.canvasHeight-35,
+			text = "Use the left/right arrow keys to scroll through the help section.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 28")
+		self.canvas.create_text(self.canvasWidth-5,self.canvasHeight-5,
+			text = "Page 3",
+			anchor = SE,
+			fill ="#632017",
+			font = "CenturyGothic 16")
+		self.canvas.create_text(xPos,135,
+			text = "Cities:",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 26")
+		self.canvas.create_text(xPos,205,
+			text = "Cities have production shields, which you use to make units. Hover or click to view how many you have.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,240,
+			text = "Cities have health that can be reduced by enemy units. Don't let it get to 0!",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,310,
+			text = "Create units by selecting a city and pressing the corresping production macro (key).",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,345,
+			text = "Unit Type : Production Shield Cost : Production Macro",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,380,
+			text = "Warrior : 7 Shields : 'w'",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,275,
+			text = "Cities gain variable amounts (from 1.5 to 3) of Production Shields, per turn.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,415,
+			text = "Archer : 8 Shields : 'a'",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,450,
+			text = "Ship : 9 Shields : 'p'",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,485,
+			text = "Settler : 10 Shields : 's'",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,520,
+			text = "Swordsman : 12 Shields : 'm'",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,555,
+			text = "Cities produce units on a tile next to them. If all such tiles are filled, cities cannot prouce until otherwise.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+
+	def drawHelpPg4(self):
+		xPos = self.canvasWidth/2
+		self.canvas.create_text(xPos,35,
+			text = "Help",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 48")
+		self.canvas.create_text(xPos,self.canvasHeight-35,
+			text = "Use the left/right arrow keys to scroll through the help section.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 28")
+		self.canvas.create_text(self.canvasWidth-5,self.canvasHeight-5,
+			text = "Page 4",
+			anchor = SE,
+			fill ="#632017",
+			font = "CenturyGothic 16")
+		self.canvas.create_text(xPos,135,
+			text = "Objective:",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 26")
+		self.canvas.create_text(xPos,205,
+			text = "Eliminate all enemy Military Units, Settlers, and Cities to win.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,240,
+			text = "Note: Ships are not military units, so you needn't eliminate them.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,275,
+			text = "Note: Any units loaded onto ships do not exist in regard to the win condition.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,310,
+			text = "Note: Once unloaded, however, units that were once on a ship count towards the win condition.",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,345,
+			text = "",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,410,
+			text = "",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,415,
+			text = "",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,450,
+			text = "",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,485,
+			text = "",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,520,
+			text = "",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+		self.canvas.create_text(xPos,555,
+			text = "",
+			anchor = CENTER,
+			fill ="#632017",
+			font = "CenturyGothic 24")
+
+	def calcUnitList(self):
+		self.blueUnits = []
+		self.redUnits = []
+		for city in City.citySet:
+			if city.team == "blue":
+				self.blueUnits.append(city)
+			elif city.team == "red":
+				self.redUnits.append(city)
+		for unit in Unit.unitSet:
+			if not isinstance(unit,Marine):
+				if unit.team == "blue":
+					self.blueUnits.append(unit)
+				elif unit.team == "red":
+					self.redUnits.append(unit)
+
+	def detectOutcome(self):
+		if len(self.blueUnits) <= 0:
+			self.victoriousTeam = ("red","Red")
+			self.outcome = True
+		elif len(self.redUnits) <= 0:
+			self.victoriousTeam = ("blue","Blue")
+			self.outcome = True
+
+	def secureWin(self):
+		unitsToRemove = []
+		for unit in Unit.unitSet:
+			if unit.team != self.victoriousTeam[0]:
+				unitsToRemove.append(unit)
+		for unit in unitsToRemove:
+			Unit.unitSet.remove(unit)
+			Unit.unitDict[(unit.xPos,unit.yPos)].remove(unit)
+
+	def displayOutcome(self):
+		self.canvas.create_oval(self.canvasWidth/4,self.canvasHeight/4,
+			3*self.canvasWidth/4,3*self.canvasHeight/4,fill="#d6d1c4",
+			outline = "#632017", width = 1)
+		self.canvas.create_text(self.canvasWidth/2,
+			self.canvasHeight/2-self.canvasHeight/8,
+			fill="#632017",
+			text = "The %s Team Won!" % self.victoriousTeam[1],
+			font = "CenturyGothic 24")
+		self.canvas.create_text(self.canvasWidth/2,
+			self.canvasHeight/2,
+			fill="#632017",
+			text = "Press Space to continue building your empire.",
+			font = "CenturyGothic 16")
+		self.canvas.create_text(self.canvasWidth/2,
+			self.canvasHeight/2+self.canvasHeight/16,
+			fill="#632017",
+			text = "Press 'r' to restart the game.",
+			font = "CenturyGothic 16")
 
 	def init(self): #initializes the animation
 		Tile.tileSet = set()
@@ -1742,8 +2336,17 @@ class Civilization(Animation): #basis of the "board" and how things will move
 		self.bShip = PhotoImage(file="blue-ship.gif")
 		self.rShip = PhotoImage(file="red-ship.gif")
 		self.city = PhotoImage(file="city.gif")
+		self.outcome = False
+		self.showDisplayOutcome = True
+		self.helpPage = 0
+		self.fullBackground = PhotoImage(file="full-background.gif")
 
 	def redrawAll(self): #redraws all
+		if not self.outcome:
+			self.calcUnitList()
+			self.detectOutcome()
+		elif self.outcome:
+			self.displayOutcome()
 		if self.splashScreen:
 			if self.help: self.drawHelp()
 			else: self.drawSplashScreen()
@@ -1763,6 +2366,13 @@ class Civilization(Animation): #basis of the "board" and how things will move
 				self.drawStatusBox()
 				self.drawPromptBox()
 				self.drawInteractionBox()
+		if not self.outcome:
+			self.calcUnitList()
+			self.detectOutcome()
+		elif self.outcome:
+			self.secureWin()
+			if self.showDisplayOutcome:
+				self.displayOutcome()
 		#self.drawPosition(self.indexA,self.indexB)
 
 Civilization().run(30,60)
